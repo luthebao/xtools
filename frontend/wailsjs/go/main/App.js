@@ -62,6 +62,10 @@ export function GetDailyStats(arg1, arg2) {
   return window['go']['main']['App']['GetDailyStats'](arg1, arg2);
 }
 
+export function GetDataDir() {
+  return window['go']['main']['App']['GetDataDir']();
+}
+
 export function GetExportPath(arg1) {
   return window['go']['main']['App']['GetExportPath'](arg1);
 }

@@ -32,6 +32,8 @@ export function GetConfigPath(arg1:string):Promise<string>;
 
 export function GetDailyStats(arg1:string,arg2:number):Promise<Array<domain.DailyStats>>;
 
+export function GetDataDir():Promise<string>;
+
 export function GetExportPath(arg1:string):Promise<string>;
 
 export function GetPendingReplies(arg1:string):Promise<Array<domain.ApprovalQueueItem>>;

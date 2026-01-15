@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 
 	"xtools/internal/adapters/activity"
@@ -49,15 +50,33 @@ func NewApp() *App {
 	return &App{}
 }
 
+// getDataDir returns the OS-specific application data directory
+func getDataDir() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		// Fallback to current directory if UserConfigDir fails
+		return "./data"
+	}
+	return filepath.Join(configDir, "XTools")
+}
+
 // startup is called at application startup
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
 	// Initialize data directories
-	dataDir := "./data"
+	// Use OS-specific application data directory:
+	// - macOS: ~/Library/Application Support/XTools
+	// - Windows: %AppData%/XTools
+	// - Linux: ~/.config/XTools
+	dataDir := getDataDir()
 	accountsDir := filepath.Join(dataDir, "accounts")
 	exportsDir := filepath.Join(dataDir, "exports")
 	dbPath := filepath.Join(dataDir, "xtools.db")
+
+	// Ensure directories exist
+	os.MkdirAll(accountsDir, 0755)
+	os.MkdirAll(exportsDir, 0755)
 
 	// Initialize event bus
 	a.eventBus = events.NewWailsEventBus(ctx)
@@ -302,4 +321,9 @@ func (a *App) GetAllActivityLogs(limit int) []domain.ActivityLog {
 // ClearActivityLogs clears activity logs for an account
 func (a *App) ClearActivityLogs(accountID string) {
 	a.handlers.ClearActivityLogs(accountID)
+}
+
+// GetDataDir returns the application data directory path
+func (a *App) GetDataDir() string {
+	return getDataDir()
 }

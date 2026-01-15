@@ -1,0 +1,14 @@
+{
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "frontend"
+        }
+    ],
+    "settings": {
+        "editor.tabSize": 4,
+        "editor.detectIndentation": false
+    }
+}

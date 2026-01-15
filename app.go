@@ -1,0 +1,305 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"path/filepath"
+
+	"xtools/internal/adapters/activity"
+	"xtools/internal/adapters/events"
+	"xtools/internal/adapters/llm"
+	"xtools/internal/adapters/storage"
+	"xtools/internal/adapters/twitter"
+	"xtools/internal/domain"
+	"xtools/internal/handlers"
+	"xtools/internal/services"
+	"xtools/internal/workers"
+)
+
+// App struct holds all application dependencies
+type App struct {
+	ctx context.Context
+
+	// Event bus
+	eventBus *events.WailsEventBus
+
+	// Activity logger
+	activityLogger *activity.InMemoryLogger
+
+	// Storage
+	configStore   *storage.YAMLConfigStore
+	metricsStore  *storage.SQLiteMetricsStore
+	replyStore    *storage.SQLiteReplyStore
+	excelExporter *storage.ExcelExporter
+
+	// Services
+	accountSvc *services.AccountService
+	searchSvc  *services.SearchService
+	replySvc   *services.ReplyService
+
+	// Workers
+	workerPool *workers.WorkerPool
+
+	// Handlers (exposed to frontend)
+	handlers *handlers.Handlers
+}
+
+// NewApp creates a new App application struct
+func NewApp() *App {
+	return &App{}
+}
+
+// startup is called at application startup
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+
+	// Initialize data directories
+	dataDir := "./data"
+	accountsDir := filepath.Join(dataDir, "accounts")
+	exportsDir := filepath.Join(dataDir, "exports")
+	dbPath := filepath.Join(dataDir, "xtools.db")
+
+	// Initialize event bus
+	a.eventBus = events.NewWailsEventBus(ctx)
+
+	// Initialize activity logger
+	a.activityLogger = activity.NewInMemoryLogger(a.eventBus)
+
+	// Initialize storage
+	var err error
+	a.configStore, err = storage.NewYAMLConfigStore(accountsDir)
+	if err != nil {
+		println("Failed to initialize config store:", err.Error())
+	}
+
+	a.metricsStore, err = storage.NewSQLiteMetricsStore(dbPath)
+	if err != nil {
+		println("Failed to initialize metrics store:", err.Error())
+	}
+
+	// Open DB for reply store
+	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL")
+	if err == nil {
+		a.replyStore, _ = storage.NewSQLiteReplyStore(db)
+	}
+
+	a.excelExporter, err = storage.NewExcelExporter(exportsDir)
+	if err != nil {
+		println("Failed to initialize excel exporter:", err.Error())
+	}
+
+	// Initialize services
+	clientFactory := twitter.NewClientFactory()
+	llmFactory := llm.NewProviderFactory()
+
+	a.accountSvc = services.NewAccountService(a.configStore, clientFactory, a.eventBus)
+	a.searchSvc = services.NewSearchService(a.accountSvc, a.metricsStore, a.excelExporter, a.eventBus)
+	a.replySvc = services.NewReplyService(a.accountSvc, a.searchSvc, llmFactory, a.replyStore, a.metricsStore, a.eventBus, a.activityLogger)
+
+	// Initialize worker pool
+	a.workerPool = workers.NewWorkerPool(a.searchSvc, a.replySvc, a.configStore, a.eventBus, a.activityLogger)
+
+	// Initialize handlers
+	a.handlers = handlers.NewHandlers(
+		a.accountSvc,
+		a.searchSvc,
+		a.replySvc,
+		a.workerPool,
+		a.configStore,
+		a.metricsStore,
+		a.excelExporter,
+		a.activityLogger,
+	)
+
+	// Create example config if no accounts exist
+	accounts, _ := a.configStore.ListAccounts()
+	if len(accounts) == 0 {
+		a.configStore.CreateExampleConfig()
+	}
+}
+
+// domReady is called after front-end resources have been loaded
+func (a App) domReady(ctx context.Context) {
+	// Start workers for enabled accounts
+	a.workerPool.StartAll()
+}
+
+// beforeClose is called when the application is about to quit
+func (a *App) beforeClose(ctx context.Context) (prevent bool) {
+	// Stop all workers gracefully
+	a.workerPool.StopAll()
+	return false
+}
+
+// shutdown is called at application termination
+func (a *App) shutdown(ctx context.Context) {
+	// Close services
+	if a.accountSvc != nil {
+		a.accountSvc.Close()
+	}
+	if a.metricsStore != nil {
+		a.metricsStore.Close()
+	}
+}
+
+// === Exposed Methods (Wails Bindings) ===
+
+// GetAccounts returns all account configurations
+func (a *App) GetAccounts() ([]domain.AccountConfig, error) {
+	return a.handlers.GetAccounts()
+}
+
+// GetAccount returns a single account
+func (a *App) GetAccount(accountID string) (*domain.AccountConfig, error) {
+	return a.handlers.GetAccount(accountID)
+}
+
+// CreateAccount creates a new account
+func (a *App) CreateAccount(cfg domain.AccountConfig) error {
+	return a.handlers.CreateAccount(cfg)
+}
+
+// UpdateAccount updates an account
+func (a *App) UpdateAccount(cfg domain.AccountConfig) error {
+	return a.handlers.UpdateAccount(cfg)
+}
+
+// DeleteAccount deletes an account
+func (a *App) DeleteAccount(accountID string) error {
+	return a.handlers.DeleteAccount(accountID)
+}
+
+// ReloadAccount reloads account from disk
+func (a *App) ReloadAccount(accountID string) (*domain.AccountConfig, error) {
+	return a.handlers.ReloadAccount(accountID)
+}
+
+// TestAccountConnection tests the connection
+func (a *App) TestAccountConnection(accountID string) error {
+	return a.handlers.TestAccountConnection(accountID)
+}
+
+// GetAccountStatus returns account status
+func (a *App) GetAccountStatus(accountID string) domain.AccountStatus {
+	return a.handlers.GetAccountStatus(accountID)
+}
+
+// StartAccount starts the worker
+func (a *App) StartAccount(accountID string) error {
+	return a.handlers.StartAccount(accountID)
+}
+
+// StopAccount stops the worker
+func (a *App) StopAccount(accountID string) error {
+	return a.handlers.StopAccount(accountID)
+}
+
+// RestartAccount restarts the worker
+func (a *App) RestartAccount(accountID string) error {
+	return a.handlers.RestartAccount(accountID)
+}
+
+// GetWorkerStatus returns worker status
+func (a *App) GetWorkerStatus() map[string]bool {
+	return a.handlers.GetWorkerStatus()
+}
+
+// SearchTweets triggers a manual search
+func (a *App) SearchTweets(accountID string) ([]domain.Tweet, error) {
+	return a.handlers.SearchTweets(accountID)
+}
+
+// ManualSearch performs a custom search
+func (a *App) ManualSearch(accountID, query string, maxResults int) ([]domain.Tweet, error) {
+	return a.handlers.ManualSearch(accountID, query, maxResults)
+}
+
+// GetTweetDetails returns tweet with thread
+func (a *App) GetTweetDetails(accountID, tweetID string) (*domain.Tweet, []domain.Tweet, error) {
+	return a.handlers.GetTweetDetails(accountID, tweetID)
+}
+
+// GetPendingReplies returns approval queue
+func (a *App) GetPendingReplies(accountID string) ([]domain.ApprovalQueueItem, error) {
+	return a.handlers.GetPendingReplies(accountID)
+}
+
+// ApproveReply approves a reply
+func (a *App) ApproveReply(replyID string) error {
+	return a.handlers.ApproveReply(replyID)
+}
+
+// RejectReply rejects a reply
+func (a *App) RejectReply(replyID string) error {
+	return a.handlers.RejectReply(replyID)
+}
+
+// EditReply edits a pending reply
+func (a *App) EditReply(replyID, newText string) error {
+	return a.handlers.EditReply(replyID, newText)
+}
+
+// GetReplyHistory returns reply history
+func (a *App) GetReplyHistory(accountID string, limit int) ([]domain.Reply, error) {
+	return a.handlers.GetReplyHistory(accountID, limit)
+}
+
+// GenerateReply generates a reply for a tweet
+func (a *App) GenerateReply(accountID string, tweet domain.Tweet) (*domain.Reply, error) {
+	return a.handlers.GenerateReply(accountID, tweet)
+}
+
+// GetProfileHistory returns profile metrics
+func (a *App) GetProfileHistory(accountID string, days int) ([]domain.ProfileSnapshot, error) {
+	return a.handlers.GetProfileHistory(accountID, days)
+}
+
+// GetReplyPerformance returns reply analytics
+func (a *App) GetReplyPerformance(accountID string, days int) (*domain.ReplyPerformanceReport, error) {
+	return a.handlers.GetReplyPerformance(accountID, days)
+}
+
+// GetDailyStats returns daily statistics
+func (a *App) GetDailyStats(accountID string, days int) ([]domain.DailyStats, error) {
+	return a.handlers.GetDailyStats(accountID, days)
+}
+
+// ExportTweets exports tweets to Excel
+func (a *App) ExportTweets(accountID, path string) error {
+	return a.handlers.ExportTweets(accountID, path)
+}
+
+// GetExportPath returns export file path
+func (a *App) GetExportPath(accountID string) string {
+	return a.handlers.GetExportPath(accountID)
+}
+
+// GetConfigPath returns config file path
+func (a *App) GetConfigPath(accountID string) string {
+	return a.handlers.GetConfigPath(accountID)
+}
+
+// ExtractCookies opens browser for Twitter login and extracts cookies
+func (a *App) ExtractCookies() (*domain.BrowserAuth, error) {
+	return a.handlers.ExtractCookies()
+}
+
+// SaveBrowserAuth saves browser auth credentials to an account
+func (a *App) SaveBrowserAuth(accountID string, auth domain.BrowserAuth) error {
+	return a.handlers.SaveBrowserAuth(accountID, auth)
+}
+
+// GetActivityLogs returns activity logs for an account
+func (a *App) GetActivityLogs(accountID string, limit int) []domain.ActivityLog {
+	return a.handlers.GetActivityLogs(accountID, limit)
+}
+
+// GetAllActivityLogs returns all activity logs
+func (a *App) GetAllActivityLogs(limit int) []domain.ActivityLog {
+	return a.handlers.GetAllActivityLogs(limit)
+}
+
+// ClearActivityLogs clears activity logs for an account
+func (a *App) ClearActivityLogs(accountID string) {
+	a.handlers.ClearActivityLogs(accountID)
+}

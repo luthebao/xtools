@@ -214,12 +214,12 @@ func (s *AccountService) GetAPIClientForPosting(accountID string) (ports.Twitter
 	}
 
 	if cfg.APICredentials == nil {
-		return nil, fmt.Errorf("API credentials required for posting replies")
+		return nil, fmt.Errorf("API credentials required for posting replies via API")
 	}
 
 	// Check if OAuth credentials are available for posting
 	if cfg.APICredentials.APIKey == "" || cfg.APICredentials.AccessToken == "" {
-		return nil, fmt.Errorf("OAuth credentials (API Key, Access Token) required for posting replies")
+		return nil, fmt.Errorf("OAuth credentials (API Key, Access Token) required for posting replies via API")
 	}
 
 	// Create a fresh API client for posting
@@ -229,6 +229,29 @@ func (s *AccountService) GetAPIClientForPosting(accountID string) (ports.Twitter
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client for posting: %w", err)
+	}
+
+	return client, nil
+}
+
+// GetBrowserClientForPosting returns a browser client for posting replies
+func (s *AccountService) GetBrowserClientForPosting(accountID string) (ports.TwitterClient, error) {
+	cfg, err := s.configStore.LoadAccount(accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	if cfg.BrowserAuth == nil || len(cfg.BrowserAuth.Cookies) == 0 {
+		return nil, fmt.Errorf("browser cookies required for posting replies via browser")
+	}
+
+	// Create a fresh browser client for posting
+	client, err := s.clientFactory.CreateClient(domain.AccountConfig{
+		AuthType:    domain.AuthTypeBrowser,
+		BrowserAuth: cfg.BrowserAuth,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create browser client for posting: %w", err)
 	}
 
 	return client, nil
@@ -263,11 +286,24 @@ func (s *AccountService) validateConfig(cfg domain.AccountConfig) error {
 		return fmt.Errorf("invalid auth type: %s", cfg.AuthType)
 	}
 
-	// API credentials are always required for posting replies
-	if cfg.APICredentials == nil ||
-		cfg.APICredentials.APIKey == "" ||
-		cfg.APICredentials.AccessToken == "" {
-		return fmt.Errorf("API credentials (API Key, Access Token) required for posting replies")
+	// Validate credentials based on reply method
+	replyMethod := cfg.ReplyConfig.ReplyMethod
+	if replyMethod == "" {
+		replyMethod = domain.ReplyMethodAPI // Default to API
+	}
+
+	if replyMethod == domain.ReplyMethodBrowser {
+		// Browser reply method requires cookies
+		if cfg.BrowserAuth == nil || len(cfg.BrowserAuth.Cookies) == 0 {
+			return fmt.Errorf("browser cookies required for posting replies via browser")
+		}
+	} else {
+		// API reply method requires OAuth credentials
+		if cfg.APICredentials == nil ||
+			cfg.APICredentials.APIKey == "" ||
+			cfg.APICredentials.AccessToken == "" {
+			return fmt.Errorf("API credentials (API Key, Access Token) required for posting replies via API")
+		}
 	}
 
 	if cfg.LLMConfig.APIKey == "" {

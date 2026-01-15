@@ -40,6 +40,7 @@ export namespace domain {
 	}
 	export class ReplyConfig {
 	    approvalMode: string;
+	    replyMethod: string;
 	    maxReplyLength: number;
 	    tone: string;
 	    includeHashtags: boolean;
@@ -52,6 +53,7 @@ export namespace domain {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.approvalMode = source["approvalMode"];
+	        this.replyMethod = source["replyMethod"];
 	        this.maxReplyLength = source["maxReplyLength"];
 	        this.tone = source["tone"];
 	        this.includeHashtags = source["includeHashtags"];

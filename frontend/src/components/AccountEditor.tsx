@@ -120,7 +120,7 @@ export default function AccountEditor({ account, isCreating, onSave, onClose, sh
                     <option value="browser">Browser (Cookies for search)</option>
                     <option value="api">API Only (Bearer for search)</option>
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">Replies always use API credentials</p>
+                  <p className="text-xs text-gray-500 mt-1">Reply method is configured separately below</p>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Enabled</label>
@@ -193,11 +193,16 @@ export default function AccountEditor({ account, isCreating, onSave, onClose, sh
               </section>
             )}
 
-            {/* API Credentials - always shown (required for posting) */}
+            {/* API Credentials - shown based on reply method or search method */}
             <section>
               <h3 className="text-sm font-semibold text-gray-400 mb-3">
                 API Credentials
-                <span className="text-xs text-red-400 ml-2">(required for posting replies)</span>
+                {formData.replyConfig?.replyMethod !== 'browser' && (
+                  <span className="text-xs text-red-400 ml-2">(required for API reply method)</span>
+                )}
+                {formData.authType === 'api' && (
+                  <span className="text-xs text-blue-400 ml-2">(required for API search)</span>
+                )}
               </h3>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -444,6 +449,22 @@ export default function AccountEditor({ account, isCreating, onSave, onClose, sh
                     <option value="auto">Auto (immediate)</option>
                     <option value="queue">Queue (manual approval)</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Reply Method</label>
+                  <select
+                    value={formData.replyConfig?.replyMethod || 'api'}
+                    onChange={(e) => handleChange('replyConfig.replyMethod', e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
+                  >
+                    <option value="api">API (OAuth credentials)</option>
+                    <option value="browser">Browser (Cookies)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.replyConfig?.replyMethod === 'browser'
+                      ? 'Requires browser cookies'
+                      : 'Requires API Key + Access Token'}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Tone</label>

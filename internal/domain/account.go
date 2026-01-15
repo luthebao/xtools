@@ -18,6 +18,14 @@ const (
 	ApprovalModeQueue ApprovalMode = "queue"
 )
 
+// ReplyMethod defines how replies are posted (api or browser)
+type ReplyMethod string
+
+const (
+	ReplyMethodAPI     ReplyMethod = "api"
+	ReplyMethodBrowser ReplyMethod = "browser"
+)
+
 // Account represents a Twitter account entity
 type Account struct {
 	ID          string
@@ -120,6 +128,7 @@ type SearchConfig struct {
 // ReplyConfig holds reply behavior settings
 type ReplyConfig struct {
 	ApprovalMode    ApprovalMode `yaml:"approval_mode" json:"approvalMode"`
+	ReplyMethod     ReplyMethod  `yaml:"reply_method" json:"replyMethod"`
 	MaxReplyLength  int          `yaml:"max_reply_length" json:"maxReplyLength"`
 	Tone            string       `yaml:"tone" json:"tone"`
 	IncludeHashtags bool         `yaml:"include_hashtags" json:"includeHashtags"`

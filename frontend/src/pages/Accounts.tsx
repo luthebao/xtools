@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Edit2, Play, Pause, FolderOpen } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
@@ -45,6 +46,7 @@ const createDefaultAccount = (): AccountConfig => ({
     },
     replyConfig: {
         approvalMode: 'queue',
+        replyMethod: 'api',
         maxReplyLength: 280,
         tone: 'professional',
         includeHashtags: false,
@@ -58,7 +60,8 @@ const createDefaultAccount = (): AccountConfig => ({
 });
 
 export default function Accounts() {
-    const { accounts, workerStatuses, setAccounts, setWorkerStatuses, removeAccount } = useAccountStore();
+    const navigate = useNavigate();
+    const { accounts, workerStatuses, setAccounts, setWorkerStatuses, removeAccount, setActiveAccount } = useAccountStore();
     const { showToast } = useUIStore();
     const [editingAccount, setEditingAccount] = useState<AccountConfig | null>(null);
     const [isCreating, setIsCreating] = useState(false);
@@ -145,6 +148,11 @@ export default function Accounts() {
         setEditingAccount(createDefaultAccount());
     };
 
+    const handleAccountClick = (accountId: string) => {
+        setActiveAccount(accountId);
+        navigate('/logs');
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -170,7 +178,11 @@ export default function Accounts() {
                     {accounts.map((account) => (
                         <Card key={account.id}>
                             <div className="flex items-start justify-between">
-                                <div className="flex-1">
+                                <div
+                                    className="flex-1 cursor-pointer hover:opacity-80 transition-opacity"
+                                    onClick={() => handleAccountClick(account.id)}
+                                    title="View activity logs"
+                                >
                                     <div className="flex items-center gap-3 mb-2">
                                         <h3 className="text-lg font-semibold">@{account.username}</h3>
                                         <span

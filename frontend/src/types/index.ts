@@ -1,6 +1,7 @@
 // Account types
 export type AuthType = string;
 export type ApprovalMode = string;
+export type ReplyMethod = string;
 export type ReplyStatus = string;
 
 export interface APICredentials {
@@ -50,6 +51,7 @@ export interface SearchConfig {
 
 export interface ReplyConfig {
   approvalMode: ApprovalMode;
+  replyMethod: ReplyMethod;
   maxReplyLength: number;
   tone: string;
   includeHashtags: boolean;

@@ -225,7 +225,7 @@ func (s *ReplyService) EditReply(replyID, newText string) error {
 	return s.replyStore.SaveReply(*reply)
 }
 
-// PostReply posts a reply to Twitter using API (always uses API, not browser)
+// PostReply posts a reply to Twitter using the configured reply method (API or browser)
 func (s *ReplyService) PostReply(ctx context.Context, reply domain.Reply) error {
 	// Check if already replied to this tweet (prevent duplicate replies)
 	if replied, _ := s.metricsStore.IsReplied(reply.AccountID, reply.TweetID); replied {
@@ -233,12 +233,31 @@ func (s *ReplyService) PostReply(ctx context.Context, reply domain.Reply) error 
 		return domain.ErrAlreadyReplied
 	}
 
-	s.log(reply.AccountID, domain.ActivityLevelInfo, "Posting reply via API", truncate(reply.Text, 50))
-
-	// Always use API client for posting (browser is only for searching)
-	client, err := s.accountSvc.GetAPIClientForPosting(reply.AccountID)
+	// Get account config to check reply method
+	cfg, err := s.accountSvc.GetAccount(reply.AccountID)
 	if err != nil {
-		s.log(reply.AccountID, domain.ActivityLevelError, "Failed to get API client", err.Error())
+		s.log(reply.AccountID, domain.ActivityLevelError, "Failed to get account config", err.Error())
+		s.markReplyFailed(reply.ID, err)
+		return err
+	}
+
+	// Determine which client to use based on reply method setting
+	var client ports.TwitterClient
+	replyMethod := cfg.ReplyConfig.ReplyMethod
+	if replyMethod == "" {
+		replyMethod = domain.ReplyMethodAPI // Default to API if not set
+	}
+
+	if replyMethod == domain.ReplyMethodBrowser {
+		s.log(reply.AccountID, domain.ActivityLevelInfo, "Posting reply via Browser", truncate(reply.Text, 50))
+		client, err = s.accountSvc.GetBrowserClientForPosting(reply.AccountID)
+	} else {
+		s.log(reply.AccountID, domain.ActivityLevelInfo, "Posting reply via API", truncate(reply.Text, 50))
+		client, err = s.accountSvc.GetAPIClientForPosting(reply.AccountID)
+	}
+
+	if err != nil {
+		s.log(reply.AccountID, domain.ActivityLevelError, "Failed to get client for posting", err.Error())
 		s.markReplyFailed(reply.ID, err)
 		return err
 	}

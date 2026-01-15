@@ -8,9 +8,8 @@ import { ActivityLog } from '../types';
 import { GetAccounts, GetActivityLogs, GetAllActivityLogs, ClearActivityLogs } from '../../wailsjs/go/main/App';
 
 export default function ActivityLogs() {
-  const { accounts, setAccounts } = useAccountStore();
+  const { accounts, activeAccountId, setAccounts, setActiveAccount } = useAccountStore();
   const { showToast } = useUIStore();
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -21,7 +20,7 @@ export default function ActivityLogs() {
 
   useEffect(() => {
     loadLogs(true);
-  }, [selectedAccountId]);
+  }, [activeAccountId]);
 
   // Auto-refresh every 3 seconds
   useEffect(() => {
@@ -32,7 +31,7 @@ export default function ActivityLogs() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [autoRefresh, selectedAccountId]);
+  }, [autoRefresh, activeAccountId]);
 
   const loadAccounts = async () => {
     try {
@@ -47,8 +46,8 @@ export default function ActivityLogs() {
     if (showLoading) setIsLoading(true);
     try {
       let result: ActivityLog[];
-      if (selectedAccountId) {
-        result = await GetActivityLogs(selectedAccountId, 100);
+      if (activeAccountId) {
+        result = await GetActivityLogs(activeAccountId, 100);
       } else {
         result = await GetAllActivityLogs(200);
       }
@@ -62,12 +61,12 @@ export default function ActivityLogs() {
   };
 
   const handleClearLogs = async () => {
-    if (!selectedAccountId) {
+    if (!activeAccountId) {
       showToast('Select an account to clear logs', 'warning');
       return;
     }
     try {
-      await ClearActivityLogs(selectedAccountId);
+      await ClearActivityLogs(activeAccountId);
       setLogs([]);
       showToast('Logs cleared', 'success');
     } catch (err) {
@@ -122,8 +121,8 @@ export default function ActivityLogs() {
       <Card>
         <div className="flex items-center gap-4">
           <select
-            value={selectedAccountId}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
+            value={activeAccountId || ''}
+            onChange={(e) => setActiveAccount(e.target.value || null)}
             className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Accounts</option>
@@ -155,7 +154,7 @@ export default function ActivityLogs() {
             )}
           </label>
 
-          {selectedAccountId && (
+          {activeAccountId && (
             <Button variant="danger" onClick={handleClearLogs}>
               <Trash2 size={16} />
               Clear Logs

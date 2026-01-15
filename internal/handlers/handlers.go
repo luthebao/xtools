@@ -66,7 +66,23 @@ func (h *Handlers) CreateAccount(cfg domain.AccountConfig) error {
 
 // UpdateAccount updates an existing account
 func (h *Handlers) UpdateAccount(cfg domain.AccountConfig) error {
-	return h.accountSvc.UpdateAccount(cfg)
+	// Check if worker is running before update
+	wasRunning := h.workerPool.IsRunning(cfg.ID)
+
+	if err := h.accountSvc.UpdateAccount(cfg); err != nil {
+		return err
+	}
+
+	// Restart worker if it was running to apply new config
+	if wasRunning {
+		h.activityLogger.Log(cfg.ID, domain.ActivityTypeConfig, domain.ActivityLevelInfo, "Config updated, restarting worker", "")
+		if err := h.workerPool.RestartWorker(cfg.ID); err != nil {
+			h.activityLogger.Log(cfg.ID, domain.ActivityTypeWorker, domain.ActivityLevelError, "Failed to restart worker after config update", err.Error())
+			// Don't return error - config was saved successfully
+		}
+	}
+
+	return nil
 }
 
 // DeleteAccount removes an account

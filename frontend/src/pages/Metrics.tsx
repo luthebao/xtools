@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BarChart3, TrendingUp, MessageSquare, Clock } from 'lucide-react';
+import { BarChart3, TrendingUp, MessageSquare, Clock, RefreshCw } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import { useAccountStore } from '../store/accountStore';
@@ -17,6 +17,8 @@ export default function Metrics() {
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [replyPerformance, setReplyPerformance] = useState<ReplyPerformanceReport | null>(null);
   const [days, setDays] = useState(7);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadAccounts();
@@ -27,6 +29,17 @@ export default function Metrics() {
       loadMetrics(activeAccountId);
     }
   }, [activeAccountId, days]);
+
+  // Auto-refresh effect
+  useEffect(() => {
+    if (!autoRefresh || !activeAccountId) return;
+
+    const interval = setInterval(() => {
+      loadMetrics(activeAccountId, true);
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [autoRefresh, activeAccountId, days]);
 
   const loadAccounts = async () => {
     try {
@@ -40,7 +53,8 @@ export default function Metrics() {
     }
   };
 
-  const loadMetrics = async (accountId: string) => {
+  const loadMetrics = async (accountId: string, silent = false) => {
+    if (!silent) setIsRefreshing(true);
     try {
       const [stats, performance] = await Promise.all([
         GetDailyStats(accountId, days),
@@ -49,7 +63,15 @@ export default function Metrics() {
       setDailyStats(stats || []);
       setReplyPerformance(performance);
     } catch (err) {
-      showToast('Failed to load metrics', 'error');
+      if (!silent) showToast('Failed to load metrics', 'error');
+    } finally {
+      if (!silent) setIsRefreshing(false);
+    }
+  };
+
+  const handleManualRefresh = () => {
+    if (activeAccountId) {
+      loadMetrics(activeAccountId);
     }
   };
 
@@ -65,29 +87,52 @@ export default function Metrics() {
 
       {/* Filters */}
       <Card>
-        <div className="flex items-center gap-4">
-          <select
-            value={activeAccountId || ''}
-            onChange={(e) => setActiveAccount(e.target.value)}
-            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Select Account</option>
-            {accounts.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                @{acc.username}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <select
+              value={activeAccountId || ''}
+              onChange={(e) => setActiveAccount(e.target.value)}
+              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Account</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  @{acc.username}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value))}
-            className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={14}>Last 14 days</option>
-            <option value={30}>Last 30 days</option>
-          </select>
+            <select
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={14}>Last 14 days</option>
+              <option value={30}>Last 30 days</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-gray-400">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="rounded bg-gray-700 border-gray-600"
+              />
+              Auto-refresh
+            </label>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing || !activeAccountId}
+            >
+              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+              Refresh
+            </Button>
+          </div>
         </div>
       </Card>
 

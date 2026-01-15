@@ -1,14 +1,15 @@
-import { useEffect } from 'react';
-import { Check, X, Edit2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, X, Edit2, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import { useAccountStore } from '../store/accountStore';
 import { useReplyStore } from '../store/replyStore';
 import { useUIStore } from '../store/uiStore';
-import { ApprovalQueueItem } from '../types';
+import { ApprovalQueueItem, Reply } from '../types';
 import {
     GetAccounts,
     GetPendingReplies,
+    GetReplyHistory,
     ApproveReply,
     RejectReply,
 } from '../../wailsjs/go/main/App';
@@ -17,6 +18,8 @@ export default function Replies() {
     const { accounts, activeAccountId, setAccounts, setActiveAccount } = useAccountStore();
     const { pendingReplies, setPendingReplies, removePendingReply } = useReplyStore();
     const { showToast } = useUIStore();
+    const [replyHistory, setReplyHistory] = useState<Reply[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         loadAccounts();
@@ -24,9 +27,18 @@ export default function Replies() {
 
     useEffect(() => {
         if (activeAccountId) {
-            loadPendingReplies(activeAccountId);
+            loadAllReplies(activeAccountId);
         }
     }, [activeAccountId]);
+
+    const loadAllReplies = async (accountId: string) => {
+        setIsLoading(true);
+        await Promise.all([
+            loadPendingReplies(accountId),
+            loadReplyHistory(accountId),
+        ]);
+        setIsLoading(false);
+    };
 
     const loadAccounts = async () => {
         try {
@@ -50,6 +62,17 @@ export default function Replies() {
             const errorMsg = typeof err === 'string' ? err : (err?.message || 'Failed to load pending replies');
             console.error('GetPendingReplies error:', err);
             showToast(errorMsg, 'error');
+        }
+    };
+
+    const loadReplyHistory = async (accountId: string) => {
+        try {
+            const history = await GetReplyHistory(accountId, 50);
+            setReplyHistory(history || []);
+        } catch (err: any) {
+            const errorMsg = typeof err === 'string' ? err : (err?.message || 'Failed to load reply history');
+            console.error('GetReplyHistory error:', err);
+            // Don't show toast for history load failure, just log it
         }
     };
 
@@ -107,8 +130,10 @@ export default function Replies() {
                     </select>
                     <Button
                         variant="secondary"
-                        onClick={() => activeAccountId && loadPendingReplies(activeAccountId)}
+                        onClick={() => activeAccountId && loadAllReplies(activeAccountId)}
+                        disabled={isLoading}
                     >
+                        <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
                         Refresh
                     </Button>
                 </div>
@@ -129,6 +154,21 @@ export default function Replies() {
                                 onApprove={() => handleApprove(item.reply.id)}
                                 onReject={() => handleReject(item.reply.id)}
                             />
+                        ))}
+                    </div>
+                )}
+            </Card>
+
+            {/* Reply History */}
+            <Card title={`Reply History (${replyHistory.length})`}>
+                {replyHistory.length === 0 ? (
+                    <p className="text-gray-400 text-center py-8">
+                        No reply history yet. Sent and processed replies will appear here.
+                    </p>
+                ) : (
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                        {replyHistory.map((reply) => (
+                            <ReplyHistoryCard key={reply.id} reply={reply} />
                         ))}
                     </div>
                 )}
@@ -186,6 +226,82 @@ function ApprovalCard({ item, onApprove, onReject }: ApprovalCardProps) {
                         <Check size={14} />
                         Approve
                     </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+interface ReplyHistoryCardProps {
+    reply: Reply;
+}
+
+function ReplyHistoryCard({ reply }: ReplyHistoryCardProps) {
+    const getStatusIcon = (status: string) => {
+        switch (status) {
+            case 'posted':
+                return <CheckCircle size={16} className="text-green-400" />;
+            case 'rejected':
+                return <XCircle size={16} className="text-red-400" />;
+            case 'failed':
+                return <AlertCircle size={16} className="text-red-400" />;
+            case 'pending':
+            case 'approved':
+                return <Clock size={16} className="text-yellow-400" />;
+            default:
+                return <Clock size={16} className="text-gray-400" />;
+        }
+    };
+
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'posted':
+                return 'bg-green-600/20 text-green-400';
+            case 'rejected':
+                return 'bg-red-600/20 text-red-400';
+            case 'failed':
+                return 'bg-red-600/20 text-red-400';
+            case 'pending':
+                return 'bg-yellow-600/20 text-yellow-400';
+            case 'approved':
+                return 'bg-blue-600/20 text-blue-400';
+            default:
+                return 'bg-gray-600/20 text-gray-400';
+        }
+    };
+
+    return (
+        <div className="p-3 bg-gray-700/50 rounded-lg">
+            <div className="flex items-start gap-3">
+                <div className="mt-1">{getStatusIcon(reply.status)}</div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-0.5 text-xs rounded ${getStatusBadge(reply.status)}`}>
+                            {reply.status}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                            Tweet ID: {reply.tweetId.slice(0, 10)}...
+                        </span>
+                        <span className="text-xs text-gray-500 ml-auto">
+                            {reply.postedAt
+                                ? new Date(reply.postedAt).toLocaleString()
+                                : new Date(reply.generatedAt).toLocaleString()}
+                        </span>
+                    </div>
+                    <p className="text-gray-200 text-sm">{reply.text}</p>
+                    {reply.errorMessage && (
+                        <p className="text-red-400 text-xs mt-1">{reply.errorMessage}</p>
+                    )}
+                    {reply.postedReplyId && (
+                        <a
+                            href={`https://x.com/i/web/status/${reply.postedReplyId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 text-xs mt-1 hover:underline"
+                        >
+                            View on X
+                        </a>
+                    )}
                 </div>
             </div>
         </div>

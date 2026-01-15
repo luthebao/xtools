@@ -161,10 +161,11 @@ func (w *SearchWorker) doSearch() {
 	w.activityLogger.Log(w.accountID, domain.ActivityTypeSearch, domain.ActivityLevelInfo, "Starting search", "")
 	w.emitStatus("searching")
 
-	ctx, cancel := context.WithTimeout(w.ctx, 60*time.Second)
-	defer cancel()
+	// Separate context for search (60 seconds)
+	searchCtx, searchCancel := context.WithTimeout(w.ctx, 60*time.Second)
+	tweets, err := w.searchSvc.SearchTweets(searchCtx, w.accountID)
+	searchCancel()
 
-	tweets, err := w.searchSvc.SearchTweets(ctx, w.accountID)
 	if err != nil {
 		w.activityLogger.Log(w.accountID, domain.ActivityTypeSearch, domain.ActivityLevelError, "Search failed", err.Error())
 		w.emitError(err)
@@ -175,10 +176,35 @@ func (w *SearchWorker) doSearch() {
 	w.activityLogger.Log(w.accountID, domain.ActivityTypeSearch, domain.ActivityLevelSuccess, fmt.Sprintf("Found %d tweets", len(tweets)), "")
 	w.emitStatus("idle")
 
-	// Process tweets for auto-reply
+	// Get delay setting from config
+	delayBetweenReplies := 60 * time.Second // Default 60 seconds
+	if cfg, err := w.configStore.LoadAccount(w.accountID); err == nil && cfg.RateLimits.MinDelayBetween > 0 {
+		delayBetweenReplies = time.Duration(cfg.RateLimits.MinDelayBetween) * time.Second
+	}
+
+	// Process tweets for auto-reply with longer timeout per tweet (2 minutes each for LLM + posting)
 	for i, tweet := range tweets {
+		// Add delay between replies (skip for first tweet)
+		if i > 0 {
+			w.activityLogger.Log(w.accountID, domain.ActivityTypeWorker, domain.ActivityLevelInfo,
+				fmt.Sprintf("Waiting %v before next reply", delayBetweenReplies), "")
+
+			select {
+			case <-w.ctx.Done():
+				w.activityLogger.Log(w.accountID, domain.ActivityTypeWorker, domain.ActivityLevelWarning, "Worker stopped during delay", "")
+				return
+			case <-time.After(delayBetweenReplies):
+				// Continue after delay
+			}
+		}
+
 		w.activityLogger.Log(w.accountID, domain.ActivityTypeWorker, domain.ActivityLevelInfo, fmt.Sprintf("Processing tweet %d/%d from @%s", i+1, len(tweets), tweet.AuthorUsername), "")
-		if err := w.replySvc.ProcessAutoReply(ctx, w.accountID, tweet); err != nil {
+
+		replyCtx, replyCancel := context.WithTimeout(w.ctx, 2*time.Minute)
+		err := w.replySvc.ProcessAutoReply(replyCtx, w.accountID, tweet)
+		replyCancel()
+
+		if err != nil {
 			// Error already logged by ReplyService
 			continue
 		}

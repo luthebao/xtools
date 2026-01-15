@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -252,6 +253,15 @@ func (s *AccountService) GetBrowserClientForPosting(accountID string) (ports.Twi
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create browser client for posting: %w", err)
+	}
+
+	// Authenticate the browser client (launches browser and sets up page)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	if err := client.Authenticate(ctx); err != nil {
+		client.Close()
+		return nil, fmt.Errorf("browser authentication failed: %w", err)
 	}
 
 	return client, nil

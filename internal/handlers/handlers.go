@@ -186,7 +186,7 @@ func (h *Handlers) GetPendingReplies(accountID string) ([]domain.ApprovalQueueIt
 
 // ApproveReply approves a pending reply
 func (h *Handlers) ApproveReply(replyID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	return h.replySvc.ApproveReply(ctx, replyID)
 }
@@ -208,7 +208,7 @@ func (h *Handlers) GetReplyHistory(accountID string, limit int) ([]domain.Reply,
 
 // GenerateReply manually generates a reply for a tweet
 func (h *Handlers) GenerateReply(accountID string, tweet domain.Tweet) (*domain.Reply, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	return h.replySvc.GenerateReply(ctx, accountID, tweet)
 }

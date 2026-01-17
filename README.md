@@ -1,4 +1,4 @@
-# XTools
+# PolyXTools
 
 A multi-purpose desktop app featuring Twitter/X automation and Polymarket trade monitoring with fresh wallet detection.
 

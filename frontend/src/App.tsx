@@ -7,6 +7,7 @@ import Replies from './pages/Replies';
 import Metrics from './pages/Metrics';
 import ActivityLogs from './pages/ActivityLogs';
 import Settings from './pages/Settings';
+import { Toaster } from './components/ui/sonner';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
+      <Toaster />
     </BrowserRouter>
   );
 }

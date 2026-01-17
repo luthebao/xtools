@@ -5,6 +5,7 @@ import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import ConfirmModal from '../components/common/ConfirmModal';
 import AccountEditor from '../components/AccountEditor';
+import { Badge } from '../components/ui/badge';
 import { useAccountStore } from '../store/accountStore';
 import { useUIStore } from '../store/uiStore';
 import { AccountConfig } from '../types';
@@ -166,7 +167,7 @@ export default function Accounts() {
             {accounts.length === 0 ? (
                 <Card>
                     <div className="text-center py-12">
-                        <p className="text-gray-400 mb-4">No accounts configured yet.</p>
+                        <p className="text-muted-foreground mb-4">No accounts configured yet.</p>
                         <Button onClick={handleAddAccount}>
                             <Plus size={16} />
                             Add Your First Account
@@ -185,58 +186,50 @@ export default function Accounts() {
                                 >
                                     <div className="flex items-center gap-3 mb-2">
                                         <h3 className="text-lg font-semibold">@{account.username}</h3>
-                                        <span
-                                            className={`px-2 py-0.5 text-xs rounded ${workerStatuses[account.id]
-                                                    ? 'bg-green-600/20 text-green-400'
-                                                    : 'bg-gray-600/20 text-gray-400'
-                                                }`}
-                                        >
+                                        <Badge variant={workerStatuses[account.id] ? 'default' : 'secondary'}>
                                             {workerStatuses[account.id] ? 'Running' : 'Stopped'}
-                                        </span>
-                                        <span className="px-2 py-0.5 text-xs rounded bg-blue-600/20 text-blue-400">
+                                        </Badge>
+                                        <Badge variant="outline">
                                             {account.authType.toUpperCase()}
-                                        </span>
+                                        </Badge>
                                         {account.debugMode && (
-                                            <span className="px-2 py-0.5 text-xs rounded bg-yellow-600/20 text-yellow-400">
+                                            <Badge variant="outline" className="border-yellow-500/50 text-yellow-500">
                                                 DEBUG
-                                            </span>
+                                            </Badge>
                                         )}
                                     </div>
 
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                         <div>
-                                            <p className="text-gray-400">Keywords</p>
+                                            <p className="text-muted-foreground">Keywords</p>
                                             <p className="font-medium">{account.searchConfig.keywords.length}</p>
                                         </div>
                                         <div>
-                                            <p className="text-gray-400">Approval Mode</p>
+                                            <p className="text-muted-foreground">Approval Mode</p>
                                             <p className="font-medium capitalize">{account.replyConfig.approvalMode}</p>
                                         </div>
                                         <div>
-                                            <p className="text-gray-400">Search Interval</p>
+                                            <p className="text-muted-foreground">Search Interval</p>
                                             <p className="font-medium">{account.searchConfig.intervalSecs}s</p>
                                         </div>
                                         <div>
-                                            <p className="text-gray-400">LLM Model</p>
+                                            <p className="text-muted-foreground">LLM Model</p>
                                             <p className="font-medium">{account.llmConfig.model}</p>
                                         </div>
                                     </div>
 
                                     <div className="mt-3">
-                                        <p className="text-gray-400 text-sm">Keywords:</p>
+                                        <p className="text-muted-foreground text-sm">Keywords:</p>
                                         <div className="flex flex-wrap gap-1 mt-1">
                                             {account.searchConfig.keywords.slice(0, 5).map((kw, i) => (
-                                                <span
-                                                    key={i}
-                                                    className="px-2 py-0.5 text-xs bg-gray-700 rounded"
-                                                >
+                                                <Badge key={i} variant="secondary" className="text-xs">
                                                     {kw}
-                                                </span>
+                                                </Badge>
                                             ))}
                                             {account.searchConfig.keywords.length > 5 && (
-                                                <span className="px-2 py-0.5 text-xs bg-gray-700 rounded">
+                                                <Badge variant="secondary" className="text-xs">
                                                     +{account.searchConfig.keywords.length - 5} more
-                                                </span>
+                                                </Badge>
                                             )}
                                         </div>
                                     </div>

@@ -11,6 +11,10 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
+import { Button } from '../ui/button';
+import { Separator } from '../ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { cn } from '../../lib/utils';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -26,41 +30,66 @@ export default function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
 
   return (
-    <aside
-      className={`fixed left-0 top-0 h-full bg-gray-800 border-r border-gray-700 transition-all duration-300 z-10 ${
-        sidebarCollapsed ? 'w-16' : 'w-64'
-      }`}
-    >
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        {!sidebarCollapsed && (
-          <h1 className="text-xl font-bold text-blue-400">XTools</h1>
+    <TooltipProvider delayDuration={0}>
+      <aside
+        className={cn(
+          "fixed left-0 top-0 h-full bg-card border-r border-border transition-all duration-300 z-10 flex flex-col",
+          sidebarCollapsed ? 'w-16' : 'w-64'
         )}
-        <button
-          onClick={toggleSidebar}
-          className="p-1 rounded hover:bg-gray-700 text-gray-400"
-        >
-          {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-        </button>
-      </div>
-
-      <nav className="p-2 space-y-1">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-400 hover:bg-gray-700 hover:text-white'
-              }`
-            }
+      >
+        <div className="flex items-center justify-between p-4 h-16">
+          {!sidebarCollapsed && (
+            <h1 className="text-xl font-bold text-primary">XTools</h1>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className={cn("h-8 w-8", sidebarCollapsed && "mx-auto")}
           >
-            <Icon size={20} />
-            {!sidebarCollapsed && <span>{label}</span>}
-          </NavLink>
-        ))}
-      </nav>
-    </aside>
+            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </Button>
+        </div>
+
+        <Separator />
+
+        <nav className="flex-1 p-2 space-y-1">
+          {navItems.map(({ to, icon: Icon, label }) => {
+            const linkContent = (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  )
+                }
+              >
+                <Icon size={20} />
+                {!sidebarCollapsed && <span className="font-medium">{label}</span>}
+              </NavLink>
+            );
+
+            if (sidebarCollapsed) {
+              return (
+                <Tooltip key={to}>
+                  <TooltipTrigger asChild>
+                    {linkContent}
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="font-medium">
+                    {label}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            }
+
+            return linkContent;
+          })}
+        </nav>
+      </aside>
+    </TooltipProvider>
   );
 }

@@ -1,4 +1,11 @@
 import { ReactNode } from 'react';
+import {
+  Card as ShadcnCard,
+  CardHeader,
+  CardTitle,
+  CardContent,
+} from '../ui/card';
+import { cn } from '../../lib/utils';
 
 interface CardProps {
   children: ReactNode;
@@ -8,15 +15,21 @@ interface CardProps {
 }
 
 export default function Card({ children, className = '', title, actions }: CardProps) {
-  return (
-    <div className={`bg-gray-800 rounded-lg border border-gray-700 ${className}`}>
-      {(title || actions) && (
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-          {title && <h3 className="font-semibold text-gray-100">{title}</h3>}
+  if (title || actions) {
+    return (
+      <ShadcnCard className={cn("bg-card border-border", className)}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 px-4 py-3">
+          {title && <CardTitle className="text-base font-semibold">{title}</CardTitle>}
           {actions && <div className="flex items-center gap-2">{actions}</div>}
-        </div>
-      )}
-      <div className="p-4">{children}</div>
-    </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 pt-0">{children}</CardContent>
+      </ShadcnCard>
+    );
+  }
+
+  return (
+    <ShadcnCard className={cn("bg-card border-border", className)}>
+      <CardContent className="p-4">{children}</CardContent>
+    </ShadcnCard>
   );
 }

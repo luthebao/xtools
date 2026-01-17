@@ -7,6 +7,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Activity,
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { Button } from '../ui/button';
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/accounts', icon: Users, label: 'Accounts' },
   { to: '/search', icon: Search, label: 'Search' },
   { to: '/metrics', icon: BarChart3, label: 'Metrics' },
+  { to: '/polymarket', icon: Activity, label: 'Polymarket' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

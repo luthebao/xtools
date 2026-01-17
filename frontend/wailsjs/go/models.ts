@@ -504,7 +504,284 @@ export namespace domain {
 		    return a;
 		}
 	}
+	export class DatabaseInfo {
+	    sizeBytes: number;
+	    sizeFormatted: string;
+	    eventCount: number;
+	    path: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new DatabaseInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sizeBytes = source["sizeBytes"];
+	        this.sizeFormatted = source["sizeFormatted"];
+	        this.eventCount = source["eventCount"];
+	        this.path = source["path"];
+	    }
+	}
+	export class FreshWalletSignal {
+	    confidence: number;
+	    factors: Record<string, number>;
+	    triggered: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new FreshWalletSignal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.confidence = source["confidence"];
+	        this.factors = source["factors"];
+	        this.triggered = source["triggered"];
+	    }
+	}
+	
+	export class PolymarketConfig {
+	    enabled: boolean;
+	    polygonRpcUrl?: string;
+	    polygonRpcUrls?: string[];
+	    minTradeSize: number;
+	    freshWalletMaxNonce: number;
+	    freshWalletMaxAge: number;
+	    alertThreshold: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PolymarketConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.polygonRpcUrl = source["polygonRpcUrl"];
+	        this.polygonRpcUrls = source["polygonRpcUrls"];
+	        this.minTradeSize = source["minTradeSize"];
+	        this.freshWalletMaxNonce = source["freshWalletMaxNonce"];
+	        this.freshWalletMaxAge = source["freshWalletMaxAge"];
+	        this.alertThreshold = source["alertThreshold"];
+	    }
+	}
+	export class WalletProfile {
+	    address: string;
+	    nonce: number;
+	    // Go type: time
+	    firstSeen?: any;
+	    ageHours?: number;
+	    isFresh: boolean;
+	    totalTxCount: number;
+	    balanceMatic?: string;
+	    balanceUsdc?: string;
+	    // Go type: time
+	    analyzedAt: any;
+	    freshThreshold: number;
+	    isBrandNew: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new WalletProfile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.address = source["address"];
+	        this.nonce = source["nonce"];
+	        this.firstSeen = this.convertValues(source["firstSeen"], null);
+	        this.ageHours = source["ageHours"];
+	        this.isFresh = source["isFresh"];
+	        this.totalTxCount = source["totalTxCount"];
+	        this.balanceMatic = source["balanceMatic"];
+	        this.balanceUsdc = source["balanceUsdc"];
+	        this.analyzedAt = this.convertValues(source["analyzedAt"], null);
+	        this.freshThreshold = source["freshThreshold"];
+	        this.isBrandNew = source["isBrandNew"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PolymarketEvent {
+	    id: number;
+	    eventType: string;
+	    assetId: string;
+	    marketSlug: string;
+	    marketName: string;
+	    marketImage: string;
+	    marketLink: string;
+	    // Go type: time
+	    timestamp: any;
+	    rawData: string;
+	    price?: string;
+	    size?: string;
+	    side?: string;
+	    bestBid?: string;
+	    bestAsk?: string;
+	    feeRateBps?: number;
+	    tradeId?: string;
+	    walletAddress?: string;
+	    outcome?: string;
+	    outcomeIndex?: number;
+	    eventSlug?: string;
+	    eventTitle?: string;
+	    traderName?: string;
+	    conditionId?: string;
+	    isFreshWallet?: boolean;
+	    walletProfile?: WalletProfile;
+	    riskSignals?: string[];
+	    riskScore?: number;
+	    freshWalletSignal?: FreshWalletSignal;
+	
+	    static createFrom(source: any = {}) {
+	        return new PolymarketEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.eventType = source["eventType"];
+	        this.assetId = source["assetId"];
+	        this.marketSlug = source["marketSlug"];
+	        this.marketName = source["marketName"];
+	        this.marketImage = source["marketImage"];
+	        this.marketLink = source["marketLink"];
+	        this.timestamp = this.convertValues(source["timestamp"], null);
+	        this.rawData = source["rawData"];
+	        this.price = source["price"];
+	        this.size = source["size"];
+	        this.side = source["side"];
+	        this.bestBid = source["bestBid"];
+	        this.bestAsk = source["bestAsk"];
+	        this.feeRateBps = source["feeRateBps"];
+	        this.tradeId = source["tradeId"];
+	        this.walletAddress = source["walletAddress"];
+	        this.outcome = source["outcome"];
+	        this.outcomeIndex = source["outcomeIndex"];
+	        this.eventSlug = source["eventSlug"];
+	        this.eventTitle = source["eventTitle"];
+	        this.traderName = source["traderName"];
+	        this.conditionId = source["conditionId"];
+	        this.isFreshWallet = source["isFreshWallet"];
+	        this.walletProfile = this.convertValues(source["walletProfile"], WalletProfile);
+	        this.riskSignals = source["riskSignals"];
+	        this.riskScore = source["riskScore"];
+	        this.freshWalletSignal = this.convertValues(source["freshWalletSignal"], FreshWalletSignal);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PolymarketEventFilter {
+	    eventTypes?: string[];
+	    marketName?: string;
+	    minPrice?: number;
+	    maxPrice?: number;
+	    side?: string;
+	    minSize?: number;
+	    limit?: number;
+	    offset?: number;
+	    freshWalletsOnly?: boolean;
+	    minRiskScore?: number;
+	    maxWalletNonce?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PolymarketEventFilter(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.eventTypes = source["eventTypes"];
+	        this.marketName = source["marketName"];
+	        this.minPrice = source["minPrice"];
+	        this.maxPrice = source["maxPrice"];
+	        this.side = source["side"];
+	        this.minSize = source["minSize"];
+	        this.limit = source["limit"];
+	        this.offset = source["offset"];
+	        this.freshWalletsOnly = source["freshWalletsOnly"];
+	        this.minRiskScore = source["minRiskScore"];
+	        this.maxWalletNonce = source["maxWalletNonce"];
+	    }
+	}
+	export class PolymarketWatcherStatus {
+	    isRunning: boolean;
+	    isConnecting: boolean;
+	    // Go type: time
+	    connectedAt?: any;
+	    eventsReceived: number;
+	    tradesReceived: number;
+	    freshWalletsFound: number;
+	    // Go type: time
+	    lastEventAt?: any;
+	    errorMessage?: string;
+	    reconnectCount: number;
+	    webSocketEndpoint: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PolymarketWatcherStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.isRunning = source["isRunning"];
+	        this.isConnecting = source["isConnecting"];
+	        this.connectedAt = this.convertValues(source["connectedAt"], null);
+	        this.eventsReceived = source["eventsReceived"];
+	        this.tradesReceived = source["tradesReceived"];
+	        this.freshWalletsFound = source["freshWalletsFound"];
+	        this.lastEventAt = this.convertValues(source["lastEventAt"], null);
+	        this.errorMessage = source["errorMessage"];
+	        this.reconnectCount = source["reconnectCount"];
+	        this.webSocketEndpoint = source["webSocketEndpoint"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ProfileSnapshot {
 	    accountId: string;
 	    // Go type: time
@@ -638,6 +915,7 @@ export namespace domain {
 		    return a;
 		}
 	}
+	
 	
 
 }

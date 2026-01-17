@@ -3,9 +3,7 @@ import {
   LayoutDashboard,
   Users,
   Search,
-  MessageSquare,
   BarChart3,
-  ScrollText,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -20,9 +18,7 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/accounts', icon: Users, label: 'Accounts' },
   { to: '/search', icon: Search, label: 'Search' },
-  { to: '/replies', icon: MessageSquare, label: 'Replies' },
   { to: '/metrics', icon: BarChart3, label: 'Metrics' },
-  { to: '/logs', icon: ScrollText, label: 'Activity Logs' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

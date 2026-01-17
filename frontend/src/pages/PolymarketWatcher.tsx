@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
     Play,
     Square,
@@ -44,6 +44,7 @@ import {
     GetPolymarketWatcherStatus,
     GetPolymarketEvents,
     SetPolymarketSaveFilter,
+    GetPolymarketSaveFilter,
     GetPolymarketConfig,
     SetPolymarketConfig,
 } from '../../wailsjs/go/main/App';
@@ -83,20 +84,32 @@ export default function PolymarketWatcher() {
     const [showFilters, setShowFilters] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [autoRefresh, setAutoRefresh] = useState(true);
-    const [freshWalletsOnly, setFreshWalletsOnly] = useState(false);
     const [config, setConfig] = useState<PolymarketConfig | null>(null);
     const [rpcUrls, setRpcUrls] = useState<string[]>([]);
     const [newRpcUrl, setNewRpcUrl] = useState('');
+    const [freshWalletMaxNonce, setFreshWalletMaxNonce] = useState(5);
 
     const loadConfig = useCallback(async () => {
         try {
             const cfg = await GetPolymarketConfig();
             setConfig(cfg);
             setRpcUrls(cfg.polygonRpcUrls || []);
+            setFreshWalletMaxNonce(cfg.freshWalletMaxNonce || 5);
         } catch (err) {
             console.error('Failed to load config:', err);
         }
     }, []);
+
+    const loadSavedFilter = useCallback(async () => {
+        try {
+            const savedFilter = await GetPolymarketSaveFilter();
+            if (savedFilter) {
+                setFilter(savedFilter);
+            }
+        } catch (err) {
+            console.error('Failed to load saved filter:', err);
+        }
+    }, [setFilter]);
 
     const loadStatus = useCallback(async () => {
         try {
@@ -105,16 +118,14 @@ export default function PolymarketWatcher() {
         } catch (err) {
             console.error('Failed to get status:', err);
         }
-    }, [setStatus]);
+        // setStatus is stable from zustand
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const loadEvents = useCallback(async () => {
         try {
             setIsLoading(true);
-            const currentFilter = { ...filter };
-            if (freshWalletsOnly) {
-                currentFilter.freshWalletsOnly = true;
-            }
-            const evts = await GetPolymarketEvents(currentFilter);
+            const evts = await GetPolymarketEvents(filter);
             setEvents(evts || []);
         } catch (err: any) {
             const errorMsg = typeof err === 'string' ? err : err?.message || 'Failed to load events';
@@ -122,25 +133,44 @@ export default function PolymarketWatcher() {
         } finally {
             setIsLoading(false);
         }
-    }, [filter, freshWalletsOnly, setEvents, setIsLoading, showToast]);
+    }, [filter, setEvents, setIsLoading, showToast]);
 
+    // Refs for event handlers to avoid recreating subscriptions
+    const autoRefreshRef = useRef(autoRefresh);
+    const filterMinSizeRef = useRef(filter.minSize);
+    const addEventRef = useRef(addEvent);
+    const showToastRef = useRef(showToast);
+
+    // Keep refs in sync
+    useEffect(() => {
+        autoRefreshRef.current = autoRefresh;
+        filterMinSizeRef.current = filter.minSize;
+        addEventRef.current = addEvent;
+        showToastRef.current = showToast;
+    }, [autoRefresh, filter.minSize, addEvent, showToast]);
+
+    // Initial load - runs once on mount
     useEffect(() => {
         loadStatus();
         loadEvents();
         loadConfig();
+        loadSavedFilter();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
+    // Event subscriptions - set up once and use refs for changing values
+    useEffect(() => {
         const handleEvent = (event: PolymarketEvent) => {
-            if (!autoRefresh) return;
+            if (!autoRefreshRef.current) return;
             const notional = getNotionalValue(event);
-            const minValue = filter.minSize || 100;
+            const minValue = filterMinSizeRef.current || 100;
             if (notional < minValue) return;
-            if (freshWalletsOnly && !event.isFreshWallet) return;
-            addEvent(event);
+            addEventRef.current(event);
         };
 
         const handleFreshWallet = (event: PolymarketEvent) => {
             if (event.riskScore && event.riskScore >= 0.7) {
-                showToast(
+                showToastRef.current(
                     `Fresh Wallet Alert: ${shortenAddress(event.walletAddress || '')} made a $${formatNotionalValue(event)} trade`,
                     'warning'
                 );
@@ -149,14 +179,18 @@ export default function PolymarketWatcher() {
 
         EventsOn('polymarket:event', handleEvent);
         EventsOn('polymarket:fresh_wallet', handleFreshWallet);
-        const statusInterval = setInterval(loadStatus, 3000);
 
         return () => {
             EventsOff('polymarket:event');
             EventsOff('polymarket:fresh_wallet');
-            clearInterval(statusInterval);
         };
-    }, [loadStatus, loadEvents, loadConfig, autoRefresh, freshWalletsOnly, addEvent, showToast, filter.minSize]);
+    }, []);
+
+    // Status polling - separate interval
+    useEffect(() => {
+        const statusInterval = setInterval(loadStatus, 3000);
+        return () => clearInterval(statusInterval);
+    }, [loadStatus]);
 
     const handleStart = async () => {
         try {
@@ -181,12 +215,8 @@ export default function PolymarketWatcher() {
     };
 
     const handleApplyFilters = async () => {
-        const saveFilter = {
-            ...filter,
-            freshWalletsOnly: freshWalletsOnly,
-        };
         try {
-            await SetPolymarketSaveFilter(saveFilter);
+            await SetPolymarketSaveFilter(filter);
             showToast('Filter applied - only matching events will be saved', 'success');
         } catch (err) {
             console.error('Failed to set save filter:', err);
@@ -197,7 +227,6 @@ export default function PolymarketWatcher() {
 
     const handleResetFilters = async () => {
         resetFilter();
-        setFreshWalletsOnly(false);
         try {
             await SetPolymarketSaveFilter({ minSize: 100 });
         } catch (err) {
@@ -223,10 +252,11 @@ export default function PolymarketWatcher() {
             const updatedConfig: PolymarketConfig = {
                 ...config,
                 polygonRpcUrls: rpcUrls,
+                freshWalletMaxNonce: freshWalletMaxNonce,
             };
             await SetPolymarketConfig(updatedConfig);
             setConfig(updatedConfig);
-            showToast('Settings saved. Restart watcher to apply RPC changes.', 'success');
+            showToast('Settings saved. Restart watcher to apply changes.', 'success');
             setShowSettings(false);
         } catch (err) {
             console.error('Failed to save settings:', err);
@@ -272,7 +302,7 @@ export default function PolymarketWatcher() {
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
                         <Settings size={16} />
-                        RPC
+                        Settings
                     </Button>
                     {status.isRunning || status.isConnecting ? (
                         <Button variant="danger" onClick={handleStop}>
@@ -462,64 +492,6 @@ export default function PolymarketWatcher() {
                                 />
                             </div>
                         </div>
-
-                        {/* Fresh Wallet Filters */}
-                        <div className="pt-4 border-t border-border">
-                            <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                                <Wallet size={16} className="text-orange-500" />
-                                Fresh Wallet Filters
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={freshWalletsOnly}
-                                            onChange={(e) => setFreshWalletsOnly(e.target.checked)}
-                                            className="rounded border-border"
-                                        />
-                                        Fresh Wallets Only
-                                    </label>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Min Risk Score</label>
-                                    <Select
-                                        value={String(filter.minRiskScore || 0)}
-                                        onValueChange={(value) => setFilter({ minRiskScore: parseFloat(value) })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Any" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="0">Any</SelectItem>
-                                            <SelectItem value="0.5">50%+ (Medium)</SelectItem>
-                                            <SelectItem value="0.7">70%+ (High)</SelectItem>
-                                            <SelectItem value="0.85">85%+ (Very High)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Max Wallet Nonce</label>
-                                    <Select
-                                        value={String(filter.maxWalletNonce || 0)}
-                                        onValueChange={(value) => setFilter({ maxWalletNonce: parseInt(value) })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Any" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="0">Any</SelectItem>
-                                            <SelectItem value="1">0-1 (Brand New)</SelectItem>
-                                            <SelectItem value="3">0-3 (Very Fresh)</SelectItem>
-                                            <SelectItem value="5">0-5 (Fresh)</SelectItem>
-                                            <SelectItem value="10">0-10</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <DialogFooter>
@@ -540,12 +512,73 @@ export default function PolymarketWatcher() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Settings size={20} />
-                            RPC Settings
+                            Watcher Settings
                         </DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
+                        {/* Fresh Wallet Settings */}
                         <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-2">
+                                <Wallet size={16} className="text-orange-500" />
+                                Fresh Wallet Detection
+                            </label>
+                            <div className="space-y-2">
+                                <label className="text-sm text-muted-foreground">
+                                    Max Nonce Threshold
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                    Wallets with transaction count (nonce) equal to or below this value are considered "fresh". Lower values = stricter detection.
+                                </p>
+                                <div className="flex items-center gap-3">
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={freshWalletMaxNonce}
+                                        onChange={(e) => setFreshWalletMaxNonce(parseInt(e.target.value) || 0)}
+                                        className="w-24"
+                                    />
+                                    <div className="text-xs text-muted-foreground">
+                                        <span className="font-medium">Common values: </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFreshWalletMaxNonce(1)}
+                                            className="text-primary hover:underline"
+                                        >
+                                            1 (brand new)
+                                        </button>
+                                        {' | '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setFreshWalletMaxNonce(3)}
+                                            className="text-primary hover:underline"
+                                        >
+                                            3
+                                        </button>
+                                        {' | '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setFreshWalletMaxNonce(5)}
+                                            className="text-primary hover:underline"
+                                        >
+                                            5 (default)
+                                        </button>
+                                        {' | '}
+                                        <button
+                                            type="button"
+                                            onClick={() => setFreshWalletMaxNonce(10)}
+                                            className="text-primary hover:underline"
+                                        >
+                                            10
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Polygon RPC URLs */}
+                        <div className="space-y-2 pt-4 border-t border-border">
                             <label className="text-sm font-medium">Polygon RPC URLs (with fallback)</label>
                             <p className="text-xs text-muted-foreground">
                                 Add multiple RPC URLs for wallet analysis. The system will automatically fall back to the next URL if one fails.
@@ -598,6 +631,7 @@ export default function PolymarketWatcher() {
                             variant="ghost"
                             onClick={() => {
                                 setRpcUrls(config?.polygonRpcUrls || []);
+                                setFreshWalletMaxNonce(config?.freshWalletMaxNonce || 5);
                                 setShowSettings(false);
                             }}
                         >
@@ -688,14 +722,34 @@ function EventCard({ event }: EventCardProps) {
         return null;
     };
 
+    const openUrl = (url: string) => {
+        BrowserOpenURL(url);
+    };
+
     return (
         <div
             className={`p-3 rounded-lg border ${
                 event.isFreshWallet
-                    ? 'border-orange-500/50 bg-orange-500/5'
+                    ? 'border-orange-500 bg-orange-500/10'
                     : 'border-border bg-card/50'
             }`}
         >
+            {/* Fresh Wallet Banner */}
+            {event.isFreshWallet && (
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-orange-500/30">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500 text-white text-sm font-medium">
+                        <AlertTriangle size={14} />
+                        FRESH WALLET DETECTED
+                    </div>
+                    {getRiskBadge()}
+                    {event.walletProfile && (
+                        <span className="text-xs text-orange-500">
+                            Nonce: {event.walletProfile.nonce}
+                        </span>
+                    )}
+                </div>
+            )}
+
             <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                     <Badge
@@ -704,13 +758,6 @@ function EventCard({ event }: EventCardProps) {
                     >
                         {EVENT_TYPE_LABELS[event.eventType] || event.eventType}
                     </Badge>
-
-                    {event.isFreshWallet && (
-                        <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/30 flex items-center gap-1">
-                            <Wallet size={12} />
-                            Fresh Wallet
-                        </Badge>
-                    )}
 
                     {event.side && (
                         <div className="flex items-center gap-1">
@@ -743,7 +790,6 @@ function EventCard({ event }: EventCardProps) {
                 </div>
 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    {getRiskBadge()}
                     <span>{new Date(event.timestamp).toLocaleTimeString()}</span>
                 </div>
             </div>
@@ -754,28 +800,24 @@ function EventCard({ event }: EventCardProps) {
                     {event.walletAddress && (
                         <div>
                             <span className="text-muted-foreground">Wallet: </span>
-                            <a
-                                href={getTraderProfileUrl() || '#'}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-mono text-primary hover:underline"
+                            <button
+                                onClick={() => openUrl(getTraderProfileUrl()!)}
+                                className="font-mono text-primary hover:underline cursor-pointer"
                             >
                                 {shortenAddress(event.walletAddress)}
-                            </a>
+                            </button>
                         </div>
                     )}
                     {event.traderName && (
                         <div>
                             <span className="text-muted-foreground">Trader: </span>
                             {event.walletAddress ? (
-                                <a
-                                    href={getTraderProfileUrl() || '#'}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-primary hover:underline"
+                                <button
+                                    onClick={() => openUrl(getTraderProfileUrl()!)}
+                                    className="text-primary hover:underline cursor-pointer"
                                 >
                                     {event.traderName}
-                                </a>
+                                </button>
                             ) : (
                                 <span>{event.traderName}</span>
                             )}
@@ -854,26 +896,22 @@ function EventCard({ event }: EventCardProps) {
                 {/* Links */}
                 <div className="flex items-center gap-4">
                     {event.walletAddress && (
-                        <a
-                            href={getTraderProfileUrl() || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                        <button
+                            onClick={() => openUrl(getTraderProfileUrl()!)}
+                            className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
                         >
                             <Wallet size={14} />
                             Trader Profile
-                        </a>
+                        </button>
                     )}
                     {event.marketLink && (
-                        <a
-                            href={event.marketLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                        <button
+                            onClick={() => openUrl(event.marketLink!)}
+                            className="inline-flex items-center gap-1 text-primary hover:underline cursor-pointer"
                         >
                             <ExternalLink size={14} />
                             View Market
-                        </a>
+                        </button>
                     )}
                 </div>
 

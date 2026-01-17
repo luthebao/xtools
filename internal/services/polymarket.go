@@ -31,7 +31,25 @@ type PolymarketService struct {
 
 // NewPolymarketService creates a new Polymarket service
 func NewPolymarketService(store *storage.PolymarketStore, eventBus ports.EventBus, dbPath string) *PolymarketService {
-	config := domain.DefaultPolymarketConfig()
+	// Try to load config from database, fall back to defaults
+	config, err := store.LoadConfig()
+	if err != nil {
+		log.Printf("[PolymarketService] No saved config found, using defaults")
+		config = domain.DefaultPolymarketConfig()
+	} else {
+		log.Printf("[PolymarketService] Loaded config from database: RPC URLs=%d, FreshWalletMaxNonce=%d",
+			len(config.PolygonRPCURLs), config.FreshWalletMaxNonce)
+	}
+
+	// Try to load filter from database, fall back to defaults
+	saveFilter, err := store.LoadFilter()
+	if err != nil {
+		log.Printf("[PolymarketService] No saved filter found, using defaults")
+		saveFilter = domain.PolymarketEventFilter{MinSize: 100}
+	} else {
+		log.Printf("[PolymarketService] Loaded filter from database: MinSize=%.0f, FreshWalletsOnly=%v",
+			saveFilter.MinSize, saveFilter.FreshWalletsOnly)
+	}
 
 	svc := &PolymarketService{
 		store:          store,
@@ -40,9 +58,7 @@ func NewPolymarketService(store *storage.PolymarketStore, eventBus ports.EventBu
 		config:         config,
 		walletAnalyzer: polymarket.NewWalletAnalyzer(config),
 		analysisCh:     make(chan *domain.PolymarketEvent, 1000),
-		saveFilter: domain.PolymarketEventFilter{
-			MinSize: 100, // Default $100 minimum
-		},
+		saveFilter:     saveFilter,
 	}
 
 	// Create WebSocket client with event callback
@@ -328,13 +344,21 @@ func (s *PolymarketService) Close() {
 	}
 }
 
-// UpdateConfig updates the service configuration
+// UpdateConfig updates the service configuration and saves to database
 func (s *PolymarketService) UpdateConfig(config domain.PolymarketConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.config = config
 	s.walletAnalyzer = polymarket.NewWalletAnalyzer(config)
+
+	// Save to database
+	if err := s.store.SaveConfig(config); err != nil {
+		log.Printf("[PolymarketService] Failed to save config: %v", err)
+	} else {
+		log.Printf("[PolymarketService] Config saved to database: RPC URLs=%d, FreshWalletMaxNonce=%d",
+			len(config.PolygonRPCURLs), config.FreshWalletMaxNonce)
+	}
 }
 
 // GetConfig returns the current configuration
@@ -344,13 +368,19 @@ func (s *PolymarketService) GetConfig() domain.PolymarketConfig {
 	return s.config
 }
 
-// SetSaveFilter sets the filter for saving events to database
+// SetSaveFilter sets the filter for saving events to database and persists it
 func (s *PolymarketService) SetSaveFilter(filter domain.PolymarketEventFilter) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.saveFilter = filter
-	log.Printf("[PolymarketService] Save filter updated: minSize=%.0f, side=%s, freshWalletsOnly=%v",
-		filter.MinSize, filter.Side, filter.FreshWalletsOnly)
+
+	// Save to database
+	if err := s.store.SaveFilter(filter); err != nil {
+		log.Printf("[PolymarketService] Failed to save filter: %v", err)
+	} else {
+		log.Printf("[PolymarketService] Filter saved to database: minSize=%.0f, side=%s, freshWalletsOnly=%v",
+			filter.MinSize, filter.Side, filter.FreshWalletsOnly)
+	}
 }
 
 // GetSaveFilter returns the current save filter

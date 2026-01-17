@@ -82,10 +82,22 @@ func (s *PolymarketStore) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_polymarket_risk_score ON polymarket_events(risk_score DESC)`,
 	}
 
+	// Settings table for storing config and filter settings
+	settingsTable := `CREATE TABLE IF NOT EXISTS polymarket_settings (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`
+
 	for _, m := range migrations {
 		if _, err := s.db.Exec(m); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
+	}
+
+	// Create settings table
+	if _, err := s.db.Exec(settingsTable); err != nil {
+		return fmt.Errorf("failed to create settings table: %w", err)
 	}
 
 	// Add new columns (ignore "duplicate column" errors)
@@ -362,4 +374,59 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// SaveSetting saves a setting to the database
+func (s *PolymarketStore) SaveSetting(key string, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to marshal setting: %w", err)
+	}
+
+	_, err = s.db.Exec(`
+		INSERT INTO polymarket_settings (key, value, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP`,
+		key, string(data), string(data))
+	return err
+}
+
+// LoadSetting loads a setting from the database
+func (s *PolymarketStore) LoadSetting(key string, dest any) error {
+	var value string
+	err := s.db.QueryRow("SELECT value FROM polymarket_settings WHERE key = ?", key).Scan(&value)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal([]byte(value), dest)
+}
+
+// SaveConfig saves the Polymarket config to the database
+func (s *PolymarketStore) SaveConfig(config domain.PolymarketConfig) error {
+	return s.SaveSetting("config", config)
+}
+
+// LoadConfig loads the Polymarket config from the database
+func (s *PolymarketStore) LoadConfig() (domain.PolymarketConfig, error) {
+	var config domain.PolymarketConfig
+	err := s.LoadSetting("config", &config)
+	if err != nil {
+		return domain.DefaultPolymarketConfig(), err
+	}
+	return config, nil
+}
+
+// SaveFilter saves the event filter to the database
+func (s *PolymarketStore) SaveFilter(filter domain.PolymarketEventFilter) error {
+	return s.SaveSetting("filter", filter)
+}
+
+// LoadFilter loads the event filter from the database
+func (s *PolymarketStore) LoadFilter() (domain.PolymarketEventFilter, error) {
+	var filter domain.PolymarketEventFilter
+	err := s.LoadSetting("filter", &filter)
+	if err != nil {
+		return domain.PolymarketEventFilter{MinSize: 100}, err
+	}
+	return filter, nil
 }

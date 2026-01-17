@@ -69,7 +69,9 @@ func (c *WebSocketClient) Connect() error {
 		return nil
 	}
 	c.isConnecting.Store(true)
+	// Always create a fresh stop channel for new connection
 	c.stopCh = make(chan struct{})
+	c.reconnectDelay = initialReconnectDelay
 	c.mu.Unlock()
 
 	// Run connection loop in background - don't block the caller
@@ -183,6 +185,11 @@ func (c *WebSocketClient) subscribe() error {
 }
 
 func (c *WebSocketClient) readLoop() {
+	// Get stop channel reference
+	c.mu.RLock()
+	stopCh := c.stopCh
+	c.mu.RUnlock()
+
 	// Start ping goroutine to keep connection alive
 	pingDone := make(chan struct{})
 	go func() {
@@ -206,6 +213,8 @@ func (c *WebSocketClient) readLoop() {
 				}
 			case <-pingDone:
 				return
+			case <-stopCh:
+				return
 			}
 		}
 	}()
@@ -227,6 +236,14 @@ func (c *WebSocketClient) readLoop() {
 	}
 
 	for {
+		// Check for stop signal
+		select {
+		case <-stopCh:
+			log.Println("[Polymarket] Read loop received stop signal")
+			return
+		default:
+		}
+
 		c.mu.RLock()
 		conn := c.conn
 		c.mu.RUnlock()
@@ -421,8 +438,9 @@ func (c *WebSocketClient) setError(msg string) {
 // Disconnect closes the WebSocket connection
 func (c *WebSocketClient) Disconnect() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
+	// Close stop channel to signal all goroutines to exit
+	// Don't set to nil - goroutines need to be able to read from closed channel
 	if c.stopCh != nil {
 		select {
 		case <-c.stopCh:
@@ -430,9 +448,9 @@ func (c *WebSocketClient) Disconnect() {
 		default:
 			close(c.stopCh)
 		}
-		c.stopCh = nil
 	}
 
+	// Close the connection to unblock any read operations
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
@@ -440,6 +458,7 @@ func (c *WebSocketClient) Disconnect() {
 
 	c.isConnected.Store(false)
 	c.isConnecting.Store(false)
+	c.mu.Unlock()
 }
 
 // GetStatus returns the current connection status

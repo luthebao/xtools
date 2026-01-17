@@ -11,6 +11,7 @@ import (
 	"xtools/internal/adapters/llm"
 	"xtools/internal/adapters/storage"
 	"xtools/internal/adapters/twitter"
+	"xtools/internal/adapters/updater"
 	"xtools/internal/domain"
 	"xtools/internal/handlers"
 	"xtools/internal/services"
@@ -326,4 +327,14 @@ func (a *App) ClearActivityLogs(accountID string) {
 // GetDataDir returns the application data directory path
 func (a *App) GetDataDir() string {
 	return getDataDir()
+}
+
+// CheckForUpdates checks GitHub for the latest release
+func (a *App) CheckForUpdates() (*updater.UpdateInfo, error) {
+	return a.handlers.CheckForUpdates()
+}
+
+// GetAppVersion returns the current application version
+func (a *App) GetAppVersion() string {
+	return a.handlers.GetAppVersion()
 }

@@ -1,8 +1,30 @@
 import { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, Key, Loader2 } from 'lucide-react';
-import Button from './common/Button';
+import { Save, Plus, Trash2, Key, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AccountConfig } from '../types';
 import { ExtractCookies } from '../../wailsjs/go/main/App';
+import { Button } from './ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from './ui/dialog';
+import {
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Checkbox,
+  Switch,
+  Textarea,
+  Alert,
+  StepIndicator,
+  Step,
+} from './ui';
 
 interface AccountEditorProps {
   account: AccountConfig | null;
@@ -12,21 +34,39 @@ interface AccountEditorProps {
   showToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
+const STEPS: Step[] = [
+  { number: 1, title: 'Basic Info' },
+  { number: 2, title: 'Authentication' },
+  { number: 3, title: 'Search' },
+  { number: 4, title: 'LLM' },
+  { number: 5, title: 'Reply & Limits' },
+];
+
+interface ValidationWarning {
+  message: string;
+  type: 'warning' | 'error';
+}
+
 export default function AccountEditor({ account, isCreating, onSave, onClose, showToast }: AccountEditorProps) {
   const [formData, setFormData] = useState<Partial<AccountConfig>>({});
   const [isExtracting, setIsExtracting] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (account) {
       setFormData(account);
+      if (!isCreating) {
+        setCompletedSteps(new Set([1, 2, 3, 4, 5]));
+      }
     }
-  }, [account]);
+  }, [account, isCreating]);
 
   if (!account) return null;
 
   const handleChange = (path: string, value: any) => {
     setFormData((prev) => {
-      const newData = JSON.parse(JSON.stringify(prev)); // Deep clone
+      const newData = JSON.parse(JSON.stringify(prev));
       const parts = path.split('.');
       let current: any = newData;
 
@@ -37,13 +77,11 @@ export default function AccountEditor({ account, isCreating, onSave, onClose, sh
         current = current[parts[i]];
       }
       current[parts[parts.length - 1]] = value;
-
       return newData;
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = () => {
     onSave(formData as AccountConfig);
   };
 
@@ -82,546 +120,637 @@ export default function AccountEditor({ account, isCreating, onSave, onClose, sh
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold">
-            {isCreating ? 'Add Account' : `Edit Account: @${account.username}`}
-          </h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded">
-            <X size={20} />
+  const getStepValidation = (step: number): ValidationWarning[] => {
+    const warnings: ValidationWarning[] = [];
+
+    switch (step) {
+      case 1:
+        if (!formData.username?.trim()) {
+          warnings.push({ message: 'Username is required', type: 'error' });
+        }
+        break;
+      case 2:
+        const searchMethod = formData.authType || 'browser';
+        const replyMethod = formData.replyConfig?.replyMethod || 'api';
+        const needsBrowserCookies = searchMethod === 'browser' || replyMethod === 'browser';
+        const needsBearerToken = searchMethod === 'api';
+        const needsOAuthCreds = replyMethod === 'api';
+
+        if (needsBrowserCookies && !formData.browserAuth?.cookies?.length) {
+          warnings.push({ message: 'Browser cookies not configured', type: 'warning' });
+        }
+        if (needsBearerToken && !formData.apiCredentials?.bearerToken) {
+          warnings.push({ message: 'Bearer token required for API search', type: 'warning' });
+        }
+        if (needsOAuthCreds) {
+          const creds = formData.apiCredentials;
+          if (!creds?.apiKey || !creds?.apiSecret || !creds?.accessToken || !creds?.accessSecret) {
+            warnings.push({ message: 'OAuth credentials incomplete for API replies', type: 'warning' });
+          }
+        }
+        break;
+      case 3:
+        if (!formData.searchConfig?.keywords?.length) {
+          warnings.push({ message: 'No keywords configured - no tweets will be found', type: 'warning' });
+        }
+        break;
+      case 4:
+        if (formData.replyConfig?.approvalMode === 'auto') {
+          if (!formData.llmConfig?.apiKey) {
+            warnings.push({ message: 'LLM API key required for auto-reply mode', type: 'warning' });
+          }
+          if (!formData.llmConfig?.model) {
+            warnings.push({ message: 'LLM model required for auto-reply mode', type: 'warning' });
+          }
+        }
+        break;
+    }
+
+    return warnings;
+  };
+
+  const canProceed = (step: number): boolean => {
+    const warnings = getStepValidation(step);
+    return !warnings.some(w => w.type === 'error');
+  };
+
+  const handleNext = () => {
+    if (!canProceed(currentStep)) {
+      showToast?.('Please fix errors before proceeding', 'error');
+      return;
+    }
+    setCompletedSteps(prev => new Set([...prev, currentStep]));
+    setCurrentStep(prev => Math.min(prev + 1, 5));
+  };
+
+  const handleBack = () => {
+    setCurrentStep(prev => Math.max(prev - 1, 1));
+  };
+
+  const handleStepClick = (step: number) => {
+    setCurrentStep(step);
+  };
+
+  const currentWarnings = getStepValidation(currentStep);
+
+  // Reusable array field component
+  const ArrayField = ({ label, path, placeholder }: { label: string; path: string; placeholder: string }) => {
+    const items = path.split('.').reduce((obj: any, key) => obj?.[key], formData) || [];
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>{label}</Label>
+          <button
+            type="button"
+            onClick={() => addArrayItem(path)}
+            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+          >
+            <Plus size={14} /> Add
           </button>
         </div>
+        <div className="space-y-2">
+          {items.map((item: string, index: number) => (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                value={item}
+                onChange={(e) => updateArrayItem(path, index, e.target.value)}
+                placeholder={placeholder}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => removeArrayItem(path, index)}
+                className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 size={16} />
+              </Button>
+            </div>
+          ))}
+          {items.length === 0 && (
+            <p className="text-sm text-muted-foreground italic py-2">None added</p>
+          )}
+        </div>
+      </div>
+    );
+  };
 
-        <form onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-120px)]">
-          <div className="space-y-6">
-            {/* Basic Info */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Basic Info</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Username</label>
-                  <input
-                    type="text"
-                    value={formData.username || ''}
-                    onChange={(e) => handleChange('username', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    placeholder="Twitter username (without @)"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Search Method</label>
-                  <select
-                    value={formData.authType || 'browser'}
-                    onChange={(e) => handleChange('authType', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  >
-                    <option value="browser">Browser (Cookies for search)</option>
-                    <option value="api">API Only (Bearer for search)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Reply method is configured separately below</p>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Enabled</label>
-                  <select
-                    value={formData.enabled ? 'true' : 'false'}
-                    onChange={(e) => handleChange('enabled', e.target.value === 'true')}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  >
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.debugMode || false}
-                      onChange={(e) => handleChange('debugMode', e.target.checked)}
-                      className="rounded bg-gray-700 border-gray-600"
-                    />
-                    <span className="text-sm text-gray-400">Debug Mode</span>
-                    <span className="text-xs text-yellow-500">(10s interval, replies need approval)</span>
-                  </label>
-                </div>
-              </div>
-            </section>
+  // Step 1: Basic Info
+  const renderStep1 = () => (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Label required>Username</Label>
+        <Input
+          value={formData.username || ''}
+          onChange={(e) => handleChange('username', e.target.value)}
+          placeholder="Twitter username (without @)"
+        />
+      </div>
 
-            {/* Browser Auth - only shown for browser search method */}
-            {formData.authType === 'browser' && (
-              <section>
-                <h3 className="text-sm font-semibold text-gray-400 mb-3">
-                  Browser Authentication
-                  <span className="text-xs text-blue-400 ml-2">(for searching)</span>
-                </h3>
-                <div className="space-y-3">
-                  <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
-                    <p className="text-yellow-400 text-sm">
-                      This will open a browser window. Log in to Twitter/X, and cookies will be automatically extracted after successful login.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <Button
-                      type="button"
-                      onClick={handleExtractCookies}
-                      disabled={isExtracting}
-                    >
-                      {isExtracting ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          Waiting for login...
-                        </>
-                      ) : (
-                        <>
-                          <Key size={16} />
-                          Extract Cookies from Browser
-                        </>
-                      )}
-                    </Button>
-
-                    {formData.browserAuth?.cookies?.length ? (
-                      <span className="text-green-400 text-sm">
-                        {formData.browserAuth.cookies.length} cookies configured
-                      </span>
-                    ) : (
-                      <span className="text-yellow-400 text-sm">No cookies configured</span>
-                    )}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* API Credentials - shown based on reply method or search method */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">
-                API Credentials
-                {formData.replyConfig?.replyMethod !== 'browser' && (
-                  <span className="text-xs text-red-400 ml-2">(required for API reply method)</span>
-                )}
-                {formData.authType === 'api' && (
-                  <span className="text-xs text-blue-400 ml-2">(required for API search)</span>
-                )}
-              </h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">API Key (Consumer Key)</label>
-                    <input
-                      type="password"
-                      value={formData.apiCredentials?.apiKey || ''}
-                      onChange={(e) => handleChange('apiCredentials.apiKey', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                      placeholder="Your API Key"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">API Secret (Consumer Secret)</label>
-                    <input
-                      type="password"
-                      value={formData.apiCredentials?.apiSecret || ''}
-                      onChange={(e) => handleChange('apiCredentials.apiSecret', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                      placeholder="Your API Secret"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Access Token</label>
-                    <input
-                      type="password"
-                      value={formData.apiCredentials?.accessToken || ''}
-                      onChange={(e) => handleChange('apiCredentials.accessToken', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                      placeholder="Your Access Token"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Access Token Secret</label>
-                    <input
-                      type="password"
-                      value={formData.apiCredentials?.accessSecret || ''}
-                      onChange={(e) => handleChange('apiCredentials.accessSecret', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                      placeholder="Your Access Token Secret"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Bearer Token (for reading)</label>
-                  <input
-                    type="password"
-                    value={formData.apiCredentials?.bearerToken || ''}
-                    onChange={(e) => handleChange('apiCredentials.bearerToken', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    placeholder="Your Bearer Token"
-                  />
-                </div>
-                <p className="text-xs text-gray-500">
-                  Get these from the Twitter Developer Portal. OAuth 1.0a credentials are needed for posting replies.
-                </p>
-              </div>
-            </section>
-
-            {/* Search Config */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Search Configuration</h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-gray-400">Keywords</label>
-                    <button
-                      type="button"
-                      onClick={() => addArrayItem('searchConfig.keywords')}
-                      className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      <Plus size={14} /> Add
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {(formData.searchConfig?.keywords || []).map((keyword: string, index: number) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={keyword}
-                          onChange={(e) => updateArrayItem('searchConfig.keywords', index, e.target.value)}
-                          className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                          placeholder="Enter keyword"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeArrayItem('searchConfig.keywords', index)}
-                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                    {(!formData.searchConfig?.keywords || formData.searchConfig.keywords.length === 0) && (
-                      <p className="text-sm text-gray-500 italic">No keywords added</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-gray-400">Exclude Keywords</label>
-                    <button
-                      type="button"
-                      onClick={() => addArrayItem('searchConfig.excludeKeywords')}
-                      className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      <Plus size={14} /> Add
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {(formData.searchConfig?.excludeKeywords || []).map((keyword: string, index: number) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={keyword}
-                          onChange={(e) => updateArrayItem('searchConfig.excludeKeywords', index, e.target.value)}
-                          className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                          placeholder="Enter keyword to exclude"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeArrayItem('searchConfig.excludeKeywords', index)}
-                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                    {(!formData.searchConfig?.excludeKeywords || formData.searchConfig.excludeKeywords.length === 0) && (
-                      <p className="text-sm text-gray-500 italic">No exclude keywords added</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm text-gray-400">Blocklist (usernames to ignore)</label>
-                    <button
-                      type="button"
-                      onClick={() => addArrayItem('searchConfig.blocklist')}
-                      className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      <Plus size={14} /> Add
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {(formData.searchConfig?.blocklist || []).map((username: string, index: number) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={username}
-                          onChange={(e) => updateArrayItem('searchConfig.blocklist', index, e.target.value)}
-                          className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                          placeholder="Username to block"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeArrayItem('searchConfig.blocklist', index)}
-                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                    {(!formData.searchConfig?.blocklist || formData.searchConfig.blocklist.length === 0) && (
-                      <p className="text-sm text-gray-500 italic">No blocked users</p>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Interval (secs)</label>
-                    <input
-                      type="number"
-                      value={formData.searchConfig?.intervalSecs || 300}
-                      onChange={(e) => handleChange('searchConfig.intervalSecs', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Max Age (mins)</label>
-                    <input
-                      type="number"
-                      value={formData.searchConfig?.maxAgeMins || 60}
-                      onChange={(e) => handleChange('searchConfig.maxAgeMins', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Min Faves</label>
-                    <input
-                      type="number"
-                      value={formData.searchConfig?.minFaves || 2}
-                      onChange={(e) => handleChange('searchConfig.minFaves', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Min Replies</label>
-                    <input
-                      type="number"
-                      value={formData.searchConfig?.minReplies || 12}
-                      onChange={(e) => handleChange('searchConfig.minReplies', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Min Retweets</label>
-                    <input
-                      type="number"
-                      value={formData.searchConfig?.minRetweets || 10}
-                      onChange={(e) => handleChange('searchConfig.minRetweets', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.searchConfig?.englishOnly || false}
-                      onChange={(e) => handleChange('searchConfig.englishOnly', e.target.checked)}
-                      className="rounded bg-gray-700 border-gray-600"
-                    />
-                    <span className="text-sm text-gray-400">English Only</span>
-                  </label>
-                </div>
-              </div>
-            </section>
-
-            {/* Reply Config */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Reply Configuration</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Approval Mode</label>
-                  <select
-                    value={formData.replyConfig?.approvalMode || 'queue'}
-                    onChange={(e) => handleChange('replyConfig.approvalMode', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  >
-                    <option value="auto">Auto (immediate)</option>
-                    <option value="queue">Queue (manual approval)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Reply Method</label>
-                  <select
-                    value={formData.replyConfig?.replyMethod || 'api'}
-                    onChange={(e) => handleChange('replyConfig.replyMethod', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  >
-                    <option value="api">API (OAuth credentials)</option>
-                    <option value="browser">Browser (Cookies)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formData.replyConfig?.replyMethod === 'browser'
-                      ? 'Requires browser cookies'
-                      : 'Requires API Key + Access Token'}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Tone</label>
-                  <input
-                    type="text"
-                    value={formData.replyConfig?.tone || ''}
-                    onChange={(e) => handleChange('replyConfig.tone', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    placeholder="professional, friendly, casual"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Max Reply Length</label>
-                  <input
-                    type="number"
-                    value={formData.replyConfig?.maxReplyLength || 280}
-                    onChange={(e) => handleChange('replyConfig.maxReplyLength', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.replyConfig?.includeHashtags || false}
-                      onChange={(e) => handleChange('replyConfig.includeHashtags', e.target.checked)}
-                      className="rounded bg-gray-700 border-gray-600"
-                    />
-                    <span className="text-sm text-gray-400">Include Hashtags in replies</span>
-                  </label>
-                </div>
-              </div>
-            </section>
-
-            {/* LLM Config */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">LLM Configuration</h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Base URL</label>
-                    <input
-                      type="text"
-                      value={formData.llmConfig?.baseUrl || ''}
-                      onChange={(e) => handleChange('llmConfig.baseUrl', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                      placeholder="https://api.openai.com/v1"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Model</label>
-                    <input
-                      type="text"
-                      value={formData.llmConfig?.model || ''}
-                      onChange={(e) => handleChange('llmConfig.model', e.target.value)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                      placeholder="gpt-4"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">API Key</label>
-                  <input
-                    type="password"
-                    value={formData.llmConfig?.apiKey || ''}
-                    onChange={(e) => handleChange('llmConfig.apiKey', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Persona/System Prompt</label>
-                  <textarea
-                    value={formData.llmConfig?.persona || ''}
-                    onChange={(e) => handleChange('llmConfig.persona', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg h-24"
-                    placeholder="You are a helpful assistant..."
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Temperature</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={formData.llmConfig?.temperature || 0.7}
-                      onChange={(e) => handleChange('llmConfig.temperature', parseFloat(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Max Tokens</label>
-                    <input
-                      type="number"
-                      value={formData.llmConfig?.maxTokens || 500}
-                      onChange={(e) => handleChange('llmConfig.maxTokens', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Rate Limits */}
-            <section>
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Rate Limits</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Searches/Hour</label>
-                  <input
-                    type="number"
-                    value={formData.rateLimits?.searchesPerHour || 10}
-                    onChange={(e) => handleChange('rateLimits.searchesPerHour', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Replies/Hour</label>
-                  <input
-                    type="number"
-                    value={formData.rateLimits?.repliesPerHour || 5}
-                    onChange={(e) => handleChange('rateLimits.repliesPerHour', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Replies/Day</label>
-                  <input
-                    type="number"
-                    value={formData.rateLimits?.repliesPerDay || 50}
-                    onChange={(e) => handleChange('rateLimits.repliesPerDay', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Min Delay (secs)</label>
-                  <input
-                    type="number"
-                    value={formData.rateLimits?.minDelayBetween || 60}
-                    onChange={(e) => handleChange('rateLimits.minDelayBetween', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg"
-                  />
-                </div>
-              </div>
-            </section>
+      <div className="space-y-2">
+        <Label>Account Status</Label>
+        <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg border border-border">
+          <div>
+            <p className="text-sm font-medium">Enable Account</p>
+            <p className="text-xs text-muted-foreground">Account will be active for searching and replying</p>
           </div>
-        </form>
+          <Switch
+            checked={formData.enabled || false}
+            onCheckedChange={(checked) => handleChange('enabled', checked)}
+          />
+        </div>
+      </div>
 
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-700">
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit}>
-            <Save size={16} />
-            {isCreating ? 'Create Account' : 'Save Changes'}
-          </Button>
+      <div className="flex items-center justify-between p-4 bg-yellow-500/5 rounded-lg border border-yellow-500/20">
+        <div className="flex items-center gap-3">
+          <Checkbox
+            checked={formData.debugMode || false}
+            onCheckedChange={(checked) => handleChange('debugMode', checked)}
+          />
+          <div>
+            <p className="text-sm font-medium">Debug Mode</p>
+            <p className="text-xs text-yellow-500">10s interval, all replies need approval</p>
+          </div>
         </div>
       </div>
     </div>
+  );
+
+  // Step 2: Authentication
+  const renderStep2 = () => {
+    const searchMethod = formData.authType || 'browser';
+    const replyMethod = formData.replyConfig?.replyMethod || 'api';
+    const needsBrowser = searchMethod === 'browser' || replyMethod === 'browser';
+    const needsApi = searchMethod === 'api' || replyMethod === 'api';
+
+    return (
+      <div className="space-y-6">
+        {/* Method Selection */}
+        <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
+          <h4 className="text-sm font-medium text-primary">Choose Your Methods</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Search Tweets Using</Label>
+              <Select
+                value={searchMethod}
+                onValueChange={(value) => handleChange('authType', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="browser">Browser (Cookies)</SelectItem>
+                  <SelectItem value="api">API (Bearer Token)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {searchMethod === 'browser' ? 'Uses logged-in browser session' : 'Uses API bearer token'}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Post Replies Using</Label>
+              <Select
+                value={replyMethod}
+                onValueChange={(value) => handleChange('replyConfig.replyMethod', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="api">API (OAuth 1.0a)</SelectItem>
+                  <SelectItem value="browser">Browser (Cookies)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {replyMethod === 'api' ? 'Uses OAuth API credentials' : 'Uses logged-in browser session'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Browser Authentication - always visible */}
+        <div className={`p-4 rounded-lg border space-y-3 ${needsBrowser ? 'bg-secondary/50 border-border' : 'bg-secondary/20 border-border/50'}`}>
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium">Browser Cookies</h4>
+            <div className="flex gap-1">
+              {searchMethod === 'browser' && (
+                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">Search</span>
+              )}
+              {replyMethod === 'browser' && (
+                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">Reply</span>
+              )}
+              {!needsBrowser && (
+                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">Not in use</span>
+              )}
+            </div>
+          </div>
+          <Alert variant="info" icon={false}>
+            Opens a browser window. Log in to Twitter/X and cookies will be extracted automatically.
+          </Alert>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              onClick={handleExtractCookies}
+              disabled={isExtracting}
+            >
+              {isExtracting ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Waiting for login...
+                </>
+              ) : (
+                <>
+                  <Key size={16} />
+                  Extract Cookies
+                </>
+              )}
+            </Button>
+            {formData.browserAuth?.cookies?.length ? (
+              <span className="text-green-500 text-sm font-medium">
+                ✓ {formData.browserAuth.cookies.length} cookies configured
+              </span>
+            ) : (
+              <span className="text-yellow-500 text-sm">No cookies configured</span>
+            )}
+          </div>
+        </div>
+
+        {/* API Credentials - always visible */}
+        <div className={`p-4 rounded-lg border space-y-4 ${needsApi ? 'bg-secondary/50 border-border' : 'bg-secondary/20 border-border/50'}`}>
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium">API Credentials</h4>
+            <div className="flex gap-1">
+              {searchMethod === 'api' && (
+                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">Search</span>
+              )}
+              {replyMethod === 'api' && (
+                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">Reply</span>
+              )}
+              {!needsApi && (
+                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded">Not in use</span>
+              )}
+            </div>
+          </div>
+
+          {/* Bearer Token for API Search */}
+          <div className="space-y-2">
+            <Label>Bearer Token {searchMethod === 'api' && <span className="text-blue-400 text-xs">(used for search)</span>}</Label>
+            <Input
+              type="password"
+              value={formData.apiCredentials?.bearerToken || ''}
+              onChange={(e) => handleChange('apiCredentials.bearerToken', e.target.value)}
+              placeholder="Bearer Token"
+            />
+          </div>
+
+          {/* OAuth Credentials for API Reply */}
+          <div className="space-y-4">
+            <Label>OAuth 1.0a Credentials {replyMethod === 'api' && <span className="text-green-400 text-xs">(used for replies)</span>}</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>API Key</Label>
+                <Input
+                  type="password"
+                  value={formData.apiCredentials?.apiKey || ''}
+                  onChange={(e) => handleChange('apiCredentials.apiKey', e.target.value)}
+                  placeholder="Consumer Key"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>API Secret</Label>
+                <Input
+                  type="password"
+                  value={formData.apiCredentials?.apiSecret || ''}
+                  onChange={(e) => handleChange('apiCredentials.apiSecret', e.target.value)}
+                  placeholder="Consumer Secret"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Access Token</Label>
+                <Input
+                  type="password"
+                  value={formData.apiCredentials?.accessToken || ''}
+                  onChange={(e) => handleChange('apiCredentials.accessToken', e.target.value)}
+                  placeholder="Access Token"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Access Token Secret</Label>
+                <Input
+                  type="password"
+                  value={formData.apiCredentials?.accessSecret || ''}
+                  onChange={(e) => handleChange('apiCredentials.accessSecret', e.target.value)}
+                  placeholder="Access Token Secret"
+                />
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Get these from the <a href="https://developer.twitter.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Twitter Developer Portal</a>
+          </p>
+        </div>
+
+        {/* Info about the combination */}
+        <Alert variant="info">
+          <strong>Your setup:</strong> {searchMethod === 'browser' ? 'Browser cookies' : 'Bearer token'} for searching, {replyMethod === 'api' ? 'OAuth API' : 'Browser cookies'} for replies.
+        </Alert>
+      </div>
+    );
+  };
+
+  // Step 3: Search Settings
+  const renderStep3 = () => (
+    <div className="space-y-6">
+      <ArrayField label="Keywords" path="searchConfig.keywords" placeholder="Enter keyword" />
+      <ArrayField label="Exclude Keywords" path="searchConfig.excludeKeywords" placeholder="Keyword to exclude" />
+      <ArrayField label="Blocklist (usernames)" path="searchConfig.blocklist" placeholder="Username to block" />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="space-y-2">
+          <Label>Interval (secs)</Label>
+          <Input
+            type="number"
+            value={formData.searchConfig?.intervalSecs || 300}
+            onChange={(e) => handleChange('searchConfig.intervalSecs', parseInt(e.target.value))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Max Age (mins)</Label>
+          <Input
+            type="number"
+            value={formData.searchConfig?.maxAgeMins || 60}
+            onChange={(e) => handleChange('searchConfig.maxAgeMins', parseInt(e.target.value))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Min Faves</Label>
+          <Input
+            type="number"
+            value={formData.searchConfig?.minFaves || 2}
+            onChange={(e) => handleChange('searchConfig.minFaves', parseInt(e.target.value))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Min Replies</Label>
+          <Input
+            type="number"
+            value={formData.searchConfig?.minReplies || 12}
+            onChange={(e) => handleChange('searchConfig.minReplies', parseInt(e.target.value))}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Min Retweets</Label>
+          <Input
+            type="number"
+            value={formData.searchConfig?.minRetweets || 10}
+            onChange={(e) => handleChange('searchConfig.minRetweets', parseInt(e.target.value))}
+          />
+        </div>
+        <div className="flex items-center gap-3 p-4 bg-secondary/50 rounded-lg border border-border">
+          <Checkbox
+            checked={formData.searchConfig?.englishOnly || false}
+            onCheckedChange={(checked) => handleChange('searchConfig.englishOnly', checked)}
+          />
+          <Label className="cursor-pointer">English Only</Label>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Step 4: LLM Config
+  const renderStep4 = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Base URL</Label>
+          <Input
+            value={formData.llmConfig?.baseUrl || ''}
+            onChange={(e) => handleChange('llmConfig.baseUrl', e.target.value)}
+            placeholder="https://api.openai.com/v1"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Model</Label>
+          <Input
+            value={formData.llmConfig?.model || ''}
+            onChange={(e) => handleChange('llmConfig.model', e.target.value)}
+            placeholder="gpt-4"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>API Key</Label>
+        <Input
+          type="password"
+          value={formData.llmConfig?.apiKey || ''}
+          onChange={(e) => handleChange('llmConfig.apiKey', e.target.value)}
+          placeholder="Your LLM API key"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Persona / System Prompt</Label>
+        <Textarea
+          value={formData.llmConfig?.persona || ''}
+          onChange={(e) => handleChange('llmConfig.persona', e.target.value)}
+          placeholder="You are a helpful assistant..."
+          className="min-h-[120px]"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Temperature</Label>
+          <Input
+            type="number"
+            step="0.1"
+            min="0"
+            max="2"
+            value={formData.llmConfig?.temperature || 0.7}
+            onChange={(e) => handleChange('llmConfig.temperature', parseFloat(e.target.value))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Max Tokens</Label>
+          <Input
+            type="number"
+            value={formData.llmConfig?.maxTokens || 500}
+            onChange={(e) => handleChange('llmConfig.maxTokens', parseInt(e.target.value))}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  // Step 5: Reply & Rate Limits
+  const renderStep5 = () => (
+    <div className="space-y-6">
+      <div>
+        <h4 className="text-sm font-medium mb-4">Reply Settings</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Approval Mode</Label>
+            <Select
+              value={formData.replyConfig?.approvalMode || 'queue'}
+              onValueChange={(value) => handleChange('replyConfig.approvalMode', value)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Auto (immediate)</SelectItem>
+                <SelectItem value="queue">Queue (manual approval)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Tone</Label>
+            <Input
+              value={formData.replyConfig?.tone || ''}
+              onChange={(e) => handleChange('replyConfig.tone', e.target.value)}
+              placeholder="professional, friendly"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Max Reply Length</Label>
+            <Input
+              type="number"
+              value={formData.replyConfig?.maxReplyLength || 280}
+              onChange={(e) => handleChange('replyConfig.maxReplyLength', parseInt(e.target.value))}
+            />
+          </div>
+          <div className="flex items-center gap-3 p-4 bg-secondary/50 rounded-lg border border-border">
+            <Checkbox
+              checked={formData.replyConfig?.includeHashtags || false}
+              onCheckedChange={(checked) => handleChange('replyConfig.includeHashtags', checked)}
+            />
+            <Label className="cursor-pointer">Include Hashtags</Label>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-sm font-medium mb-4">Rate Limits</h4>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label>Searches/Hour</Label>
+            <Input
+              type="number"
+              value={formData.rateLimits?.searchesPerHour || 10}
+              onChange={(e) => handleChange('rateLimits.searchesPerHour', parseInt(e.target.value))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Replies/Hour</Label>
+            <Input
+              type="number"
+              value={formData.rateLimits?.repliesPerHour || 5}
+              onChange={(e) => handleChange('rateLimits.repliesPerHour', parseInt(e.target.value))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Replies/Day</Label>
+            <Input
+              type="number"
+              value={formData.rateLimits?.repliesPerDay || 50}
+              onChange={(e) => handleChange('rateLimits.repliesPerDay', parseInt(e.target.value))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Min Delay (secs)</Label>
+            <Input
+              type="number"
+              value={formData.rateLimits?.minDelayBetween || 60}
+              onChange={(e) => handleChange('rateLimits.minDelayBetween', parseInt(e.target.value))}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1: return renderStep1();
+      case 2: return renderStep2();
+      case 3: return renderStep3();
+      case 4: return renderStep4();
+      case 5: return renderStep5();
+      default: return null;
+    }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 py-4 border-b border-border">
+          <DialogTitle>
+            {isCreating ? 'Add Account' : `Edit: @${account.username}`}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Step Indicator */}
+        <div className="px-6 py-3 border-b border-border">
+          <StepIndicator
+            steps={STEPS}
+            currentStep={currentStep}
+            completedSteps={completedSteps}
+            onStepClick={handleStepClick}
+          />
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="px-6 py-4">
+            {currentWarnings.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {currentWarnings.map((warning, idx) => (
+                  <Alert key={idx} variant={warning.type === 'error' ? 'destructive' : 'warning'}>
+                    {warning.message}
+                  </Alert>
+                ))}
+              </div>
+            )}
+            {renderStepContent()}
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <DialogFooter className="px-6 py-4 border-t border-border bg-secondary/30">
+          <div className="flex items-center justify-between w-full">
+            <Button
+              variant="ghost"
+              onClick={handleBack}
+              disabled={currentStep === 1}
+            >
+              <ChevronLeft size={16} />
+              Back
+            </Button>
+
+            <span className="text-sm text-muted-foreground hidden sm:block">
+              Step {currentStep} of {STEPS.length}
+            </span>
+
+            {currentStep < 5 ? (
+              <Button onClick={handleNext}>
+                Next
+                <ChevronRight size={16} />
+              </Button>
+            ) : (
+              <Button onClick={handleSubmit}>
+                <Save size={16} />
+                {isCreating ? 'Create' : 'Save'}
+              </Button>
+            )}
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

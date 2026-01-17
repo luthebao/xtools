@@ -186,3 +186,13 @@ export interface ActivityLog {
   details?: string;
   timestamp: string;
 }
+
+// Update types
+export interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  isUpdateAvailable: boolean;
+  releaseUrl?: string;
+  releaseNotes?: string;
+  publishedAt?: string;
+}

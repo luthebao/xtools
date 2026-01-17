@@ -1,13 +1,12 @@
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import Toast from './Toast';
 import { useUIStore } from '../../store/uiStore';
 
 export default function Layout() {
   const { sidebarCollapsed } = useUIStore();
 
   return (
-    <div className="flex h-screen bg-gray-900 text-gray-100">
+    <div className="flex h-screen bg-background text-foreground">
       <Sidebar />
       <main
         className={`flex-1 overflow-auto transition-all duration-300 ${
@@ -18,7 +17,6 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
-      <Toast />
     </div>
   );
 }

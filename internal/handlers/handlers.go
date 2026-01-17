@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"xtools/internal/adapters/twitter"
+	"xtools/internal/adapters/updater"
 	"xtools/internal/domain"
 	"xtools/internal/ports"
 	"xtools/internal/services"
@@ -22,6 +23,7 @@ type Handlers struct {
 	metricsStore   ports.MetricsStore
 	excelExporter  ports.ExcelExporter
 	activityLogger ports.ActivityLogger
+	updater        *updater.Updater
 }
 
 // NewHandlers creates a new handlers instance
@@ -44,6 +46,7 @@ func NewHandlers(
 		metricsStore:   metricsStore,
 		excelExporter:  excelExporter,
 		activityLogger: activityLogger,
+		updater:        updater.NewUpdater(),
 	}
 }
 
@@ -304,4 +307,18 @@ func (h *Handlers) ClearActivityLogs(accountID string) {
 // LogActivity manually logs an activity (useful for frontend logging)
 func (h *Handlers) LogActivity(accountID string, actType string, level string, message string) {
 	h.activityLogger.Log(accountID, domain.ActivityType(actType), domain.ActivityLevel(level), message, "")
+}
+
+// === Update Handlers ===
+
+// CheckForUpdates checks GitHub for the latest release
+func (h *Handlers) CheckForUpdates() (*updater.UpdateInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return h.updater.CheckForUpdates(ctx)
+}
+
+// GetAppVersion returns the current application version
+func (h *Handlers) GetAppVersion() string {
+	return h.updater.GetCurrentVersion()
 }

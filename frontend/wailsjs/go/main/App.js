@@ -6,6 +6,10 @@ export function ApproveReply(arg1) {
   return window['go']['main']['App']['ApproveReply'](arg1);
 }
 
+export function CheckForUpdates() {
+  return window['go']['main']['App']['CheckForUpdates']();
+}
+
 export function ClearActivityLogs(arg1) {
   return window['go']['main']['App']['ClearActivityLogs'](arg1);
 }
@@ -52,6 +56,10 @@ export function GetActivityLogs(arg1, arg2) {
 
 export function GetAllActivityLogs(arg1) {
   return window['go']['main']['App']['GetAllActivityLogs'](arg1);
+}
+
+export function GetAppVersion() {
+  return window['go']['main']['App']['GetAppVersion']();
 }
 
 export function GetConfigPath(arg1) {

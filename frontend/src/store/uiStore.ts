@@ -1,53 +1,46 @@
 import { create } from 'zustand';
-
-interface Toast {
-  id: string;
-  message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
-}
+import { toast } from 'sonner';
 
 interface UIState {
-  toasts: Toast[];
-  isModalOpen: boolean;
-  modalContent: React.ReactNode | null;
-  sidebarCollapsed: boolean;
+    isModalOpen: boolean;
+    modalContent: React.ReactNode | null;
+    sidebarCollapsed: boolean;
 
-  // Actions
-  showToast: (message: string, type: Toast['type']) => void;
-  removeToast: (id: string) => void;
-  openModal: (content: React.ReactNode) => void;
-  closeModal: () => void;
-  toggleSidebar: () => void;
+    // Actions
+    showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+    openModal: (content: React.ReactNode) => void;
+    closeModal: () => void;
+    toggleSidebar: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  toasts: [],
-  isModalOpen: false,
-  modalContent: null,
-  sidebarCollapsed: false,
+    isModalOpen: false,
+    modalContent: null,
+    sidebarCollapsed: false,
 
-  showToast: (message, type) => {
-    const id = Date.now().toString();
-    set((state) => ({
-      toasts: [...state.toasts, { id, message, type }],
-    }));
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-      set((state) => ({
-        toasts: state.toasts.filter((t) => t.id !== id),
-      }));
-    }, 5000);
-  },
+    showToast: (message, type) => {
+        switch (type) {
+            case 'success':
+                toast.success(message);
+                break;
+            case 'error':
+                toast.error(message);
+                break;
+            case 'warning':
+                toast.warning(message);
+                break;
+            case 'info':
+                toast.info(message);
+                break;
+            default:
+                toast(message);
+        }
+    },
 
-  removeToast: (id) =>
-    set((state) => ({
-      toasts: state.toasts.filter((t) => t.id !== id),
-    })),
+    openModal: (content) => set({ isModalOpen: true, modalContent: content }),
 
-  openModal: (content) => set({ isModalOpen: true, modalContent: content }),
+    closeModal: () => set({ isModalOpen: false, modalContent: null }),
 
-  closeModal: () => set({ isModalOpen: false, modalContent: null }),
-
-  toggleSidebar: () =>
-    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+    toggleSidebar: () =>
+        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
 }));

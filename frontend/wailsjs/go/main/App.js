@@ -66,6 +66,10 @@ export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
 }
 
+export function GetBrowserPath() {
+  return window['go']['main']['App']['GetBrowserPath']();
+}
+
 export function GetConfigPath(arg1) {
   return window['go']['main']['App']['GetConfigPath'](arg1);
 }

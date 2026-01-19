@@ -35,6 +35,8 @@ export function GetAllActivityLogs(arg1:number):Promise<Array<domain.ActivityLog
 
 export function GetAppVersion():Promise<string>;
 
+export function GetBrowserPath():Promise<string>;
+
 export function GetConfigPath(arg1:string):Promise<string>;
 
 export function GetDailyStats(arg1:string,arg2:number):Promise<Array<domain.DailyStats>>;

@@ -28,9 +28,7 @@ func NewCookieExtractor() *CookieExtractor {
 // ExtractCookies opens browser for login and extracts cookies
 func (e *CookieExtractor) ExtractCookies(ctx context.Context) (*domain.BrowserAuth, error) {
 	// Launch visible browser for user to log in with stealth settings
-	path, _ := launcher.LookPath()
-	u := launcher.New().
-		Bin(path).
+	l := launcher.New().
 		Headless(false).
 		// Anti-bot detection flags
 		Set("disable-blink-features", "AutomationControlled").
@@ -39,8 +37,21 @@ func (e *CookieExtractor) ExtractCookies(ctx context.Context) (*domain.BrowserAu
 		Set("disable-dev-shm-usage").
 		Set("no-first-run").
 		Set("no-default-browser-check").
-		Delete("enable-automation").
-		MustLaunch()
+		Delete("enable-automation")
+
+	// Try to find Chrome/Edge on Windows, otherwise let rod download it
+	path, found := launcher.LookPath()
+	if found {
+		l = l.Bin(path)
+		fmt.Printf("[Cookie Extractor] Using browser at: %s\n", path)
+	} else {
+		fmt.Println("[Cookie Extractor] Browser not found, downloading Chromium...")
+	}
+
+	u, err := l.Launch()
+	if err != nil {
+		return nil, fmt.Errorf("failed to launch browser: %w", err)
+	}
 
 	e.browser = rod.New().ControlURL(u).MustConnect()
 	defer e.browser.MustClose()
@@ -59,7 +70,7 @@ func (e *CookieExtractor) ExtractCookies(ctx context.Context) (*domain.BrowserAu
 	fmt.Println("[Cookie Extractor] Waiting for login (max 5 minutes)...")
 
 	// Wait for successful login by checking for home page or auth cookie
-	err := e.waitForLogin(ctx, page)
+	err = e.waitForLogin(ctx, page)
 	if err != nil {
 		return nil, fmt.Errorf("login timeout or cancelled: %w", err)
 	}

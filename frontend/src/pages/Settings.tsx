@@ -8,7 +8,7 @@ import ConfirmModal from '../components/common/ConfirmModal';
 import LogsViewerModal from '../components/common/LogsViewerModal';
 import { useUIStore } from '../store/uiStore';
 import { UpdateInfo, DatabaseInfo, NotificationConfig } from '../types';
-import { CheckForUpdates, GetAppVersion, GetDataDir, GetDatabaseInfo, ClearPolymarketEvents, OpenFolder, GetNotificationConfig, SetNotificationConfig, SendTestNotification } from '../../wailsjs/go/main/App';
+import { CheckForUpdates, GetAppVersion, GetDataDir, GetDatabaseInfo, ClearPolymarketEvents, OpenFolder, GetNotificationConfig, SetNotificationConfig, SendTestNotification, GetBrowserPath } from '../../wailsjs/go/main/App';
 
 export default function Settings() {
     const { showToast } = useUIStore();
@@ -29,6 +29,7 @@ export default function Settings() {
     const [isSavingNotification, setIsSavingNotification] = useState(false);
     const [isSendingTest, setIsSendingTest] = useState(false);
     const [showBotToken, setShowBotToken] = useState(false);
+    const [browserPath, setBrowserPath] = useState<string>('');
 
     const DB_SIZE_WARNING_THRESHOLD = 20 * 1024 * 1024; // 20MB
 
@@ -37,7 +38,18 @@ export default function Settings() {
         loadDataDir();
         loadDbInfo();
         loadNotificationConfig();
+        loadBrowserPath();
     }, []);
+
+    const loadBrowserPath = async () => {
+        try {
+            const path = await GetBrowserPath();
+            setBrowserPath(path);
+        } catch (err) {
+            console.error('Failed to get browser path:', err);
+            setBrowserPath('Error detecting browser');
+        }
+    };
 
     const loadNotificationConfig = async () => {
         try {
@@ -273,6 +285,36 @@ export default function Settings() {
                                 Open
                             </Button>
                         </div>
+                    </div>
+                </div>
+            </Card>
+
+            <Card title="Browser (Cookie Extraction)">
+                <div className="space-y-4">
+                    <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                            Browser used for Twitter cookie extraction. If no browser is found, Chromium will be downloaded automatically.
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <code className="flex-1 bg-secondary px-3 py-2 rounded text-sm font-mono break-all">
+                                {browserPath || 'Loading...'}
+                            </code>
+                            <Button variant="ghost" size="sm" onClick={loadBrowserPath}>
+                                <RefreshCw size={16} />
+                            </Button>
+                        </div>
+                        {browserPath && !browserPath.includes('Not found') && !browserPath.includes('Error') && (
+                            <Badge variant="outline" className="text-green-500 border-green-500/50">
+                                <Check size={12} className="mr-1" />
+                                Browser detected
+                            </Badge>
+                        )}
+                        {browserPath && browserPath.includes('Not found') && (
+                            <Badge variant="outline" className="text-yellow-500 border-yellow-500/50">
+                                <AlertTriangle size={12} className="mr-1" />
+                                Will download Chromium
+                            </Badge>
+                        )}
                     </div>
                 </div>
             </Card>

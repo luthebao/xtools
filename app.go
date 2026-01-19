@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/go-rod/rod/lib/launcher"
+
 	"xtools/internal/adapters/activity"
 	"xtools/internal/adapters/events"
 	"xtools/internal/adapters/llm"
@@ -453,4 +455,13 @@ func (a *App) SetNotificationConfig(config domain.NotificationConfig) error {
 // SendTestNotification sends a test notification
 func (a *App) SendTestNotification() error {
 	return a.handlers.SendTestNotification()
+}
+
+// GetBrowserPath returns the detected browser path for cookie extraction
+func (a *App) GetBrowserPath() string {
+	path, found := launcher.LookPath()
+	if found {
+		return path
+	}
+	return "Not found (will download Chromium automatically)"
 }

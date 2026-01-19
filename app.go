@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-rod/rod/lib/launcher"
 
+	"xtools/internal/adapters/actions"
 	"xtools/internal/adapters/activity"
 	"xtools/internal/adapters/events"
 	"xtools/internal/adapters/llm"
@@ -37,6 +38,7 @@ type App struct {
 	metricsStore     *storage.SQLiteMetricsStore
 	replyStore       *storage.SQLiteReplyStore
 	polymarketStore  *storage.PolymarketStore
+	actionStore      *storage.ActionStore
 	excelExporter    *storage.ExcelExporter
 
 	// Services
@@ -45,6 +47,7 @@ type App struct {
 	replySvc        *services.ReplyService
 	polymarketSvc   *services.PolymarketService
 	notificationSvc *services.NotificationService
+	actionSvc       *services.ActionService
 
 	// Workers
 	workerPool *workers.WorkerPool
@@ -134,6 +137,11 @@ func (a *App) startup(ctx context.Context) {
 		println("Failed to initialize polymarket store:", err.Error())
 	}
 
+	a.actionStore, err = storage.NewActionStore(db)
+	if err != nil {
+		println("Failed to initialize action store:", err.Error())
+	}
+
 	// Initialize services
 	clientFactory := twitter.NewClientFactory()
 	llmFactory := llm.NewProviderFactory()
@@ -144,8 +152,27 @@ func (a *App) startup(ctx context.Context) {
 	a.polymarketSvc = services.NewPolymarketService(a.polymarketStore, a.eventBus, dbPath)
 	a.notificationSvc = services.NewNotificationService(a.polymarketStore, a.eventBus)
 
+	// Initialize screenshot capture (lazy browser initialization)
+	screenshotCapture, err := actions.NewScreenshotCapture(dataDir)
+	if err != nil {
+		println("Failed to initialize screenshot capture:", err.Error())
+	}
+
+	// Initialize action service (uses default LLM config - accounts have their own)
+	a.actionSvc = services.NewActionService(
+		a.accountSvc,
+		a.actionStore,
+		nil, // Agent created per-account with account's LLM config
+		screenshotCapture,
+		a.eventBus,
+		a.activityLogger,
+	)
+
 	// Start notification service to listen for events
 	a.notificationSvc.Start()
+
+	// Start action service
+	a.actionSvc.Start()
 
 	// Initialize worker pool
 	a.workerPool = workers.NewWorkerPool(a.searchSvc, a.replySvc, a.configStore, a.eventBus, a.activityLogger)
@@ -157,6 +184,7 @@ func (a *App) startup(ctx context.Context) {
 		a.replySvc,
 		a.polymarketSvc,
 		a.notificationSvc,
+		a.actionSvc,
 		a.workerPool,
 		a.configStore,
 		a.metricsStore,
@@ -198,6 +226,9 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	if a.notificationSvc != nil {
 		a.notificationSvc.Stop()
+	}
+	if a.actionSvc != nil {
+		a.actionSvc.Stop()
 	}
 }
 
@@ -464,4 +495,26 @@ func (a *App) GetBrowserPath() string {
 		return path
 	}
 	return "Not found (will download Chromium automatically)"
+}
+
+// === Action Bindings ===
+
+// GetPendingActions returns pending tweet actions for an account
+func (a *App) GetPendingActions(accountID string) ([]domain.TweetAction, error) {
+	return a.handlers.GetPendingActions(accountID)
+}
+
+// GetActionHistory returns tweet action history for an account
+func (a *App) GetActionHistory(accountID string, limit int) ([]domain.TweetActionHistory, error) {
+	return a.handlers.GetActionHistory(accountID, limit)
+}
+
+// GetActionStats returns action statistics for an account
+func (a *App) GetActionStats(accountID string) (*domain.ActionStats, error) {
+	return a.handlers.GetActionStats(accountID)
+}
+
+// TestTweetAction manually triggers a test tweet action for debugging
+func (a *App) TestTweetAction(accountID string) error {
+	return a.handlers.TestTweetAction(accountID)
 }

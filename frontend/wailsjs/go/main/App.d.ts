@@ -29,6 +29,10 @@ export function GetAccountStatus(arg1:string):Promise<domain.AccountStatus>;
 
 export function GetAccounts():Promise<Array<domain.AccountConfig>>;
 
+export function GetActionHistory(arg1:string,arg2:number):Promise<Array<domain.TweetActionHistory>>;
+
+export function GetActionStats(arg1:string):Promise<domain.ActionStats>;
+
 export function GetActivityLogs(arg1:string,arg2:number):Promise<Array<domain.ActivityLog>>;
 
 export function GetAllActivityLogs(arg1:number):Promise<Array<domain.ActivityLog>>;
@@ -48,6 +52,8 @@ export function GetDatabaseInfo():Promise<domain.DatabaseInfo>;
 export function GetExportPath(arg1:string):Promise<string>;
 
 export function GetNotificationConfig():Promise<domain.NotificationConfig>;
+
+export function GetPendingActions(arg1:string):Promise<Array<domain.TweetAction>>;
 
 export function GetPendingReplies(arg1:string):Promise<Array<domain.ApprovalQueueItem>>;
 
@@ -102,5 +108,7 @@ export function StopAccount(arg1:string):Promise<void>;
 export function StopPolymarketWatcher():Promise<void>;
 
 export function TestAccountConnection(arg1:string):Promise<void>;
+
+export function TestTweetAction(arg1:string):Promise<void>;
 
 export function UpdateAccount(arg1:domain.AccountConfig):Promise<void>;

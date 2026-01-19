@@ -27,6 +27,7 @@ type Handlers struct {
 	replySvc        *services.ReplyService
 	polymarketSvc   *services.PolymarketService
 	notificationSvc NotificationServiceInterface
+	actionSvc       *services.ActionService
 	workerPool      *workers.WorkerPool
 	configStore     ports.ConfigStore
 	metricsStore    ports.MetricsStore
@@ -42,6 +43,7 @@ func NewHandlers(
 	replySvc *services.ReplyService,
 	polymarketSvc *services.PolymarketService,
 	notificationSvc NotificationServiceInterface,
+	actionSvc *services.ActionService,
 	workerPool *workers.WorkerPool,
 	configStore ports.ConfigStore,
 	metricsStore ports.MetricsStore,
@@ -54,6 +56,7 @@ func NewHandlers(
 		replySvc:        replySvc,
 		polymarketSvc:   polymarketSvc,
 		notificationSvc: notificationSvc,
+		actionSvc:       actionSvc,
 		workerPool:      workerPool,
 		configStore:     configStore,
 		metricsStore:    metricsStore,
@@ -449,4 +452,51 @@ func (h *Handlers) SendTestNotification() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return h.notificationSvc.SendTestNotification(ctx)
+}
+
+// === Action Handlers ===
+
+// GetPendingActions returns pending tweet actions for an account
+func (h *Handlers) GetPendingActions(accountID string) ([]domain.TweetAction, error) {
+	if h.actionSvc == nil {
+		return nil, fmt.Errorf("action service not initialized")
+	}
+	return h.actionSvc.GetPendingActions(accountID)
+}
+
+// GetActionHistory returns tweet action history for an account
+func (h *Handlers) GetActionHistory(accountID string, limit int) ([]domain.TweetActionHistory, error) {
+	if h.actionSvc == nil {
+		return nil, fmt.Errorf("action service not initialized")
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	return h.actionSvc.GetActionHistory(accountID, limit)
+}
+
+// GetActionStats returns action statistics for an account
+func (h *Handlers) GetActionStats(accountID string) (*domain.ActionStats, error) {
+	if h.actionSvc == nil {
+		return nil, fmt.Errorf("action service not initialized")
+	}
+	return h.actionSvc.GetActionStats(accountID)
+}
+
+// TestTweetAction manually triggers a test tweet action for debugging
+func (h *Handlers) TestTweetAction(accountID string) error {
+	if h.actionSvc == nil {
+		return fmt.Errorf("action service not initialized")
+	}
+
+	// Create a sample profile for testing
+	testProfile := domain.WalletProfile{
+		Address:        "0x1234567890abcdef1234567890abcdef12345678",
+		BetCount:       2,
+		FreshnessLevel: domain.FreshnessInsider,
+		JoinDate:       "Jan 2025",
+		IsFresh:        true,
+	}
+
+	return h.actionSvc.TestAction(accountID, testProfile, nil)
 }

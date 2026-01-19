@@ -65,6 +65,69 @@ export interface RateLimits {
     minDelayBetween: number;
 }
 
+// Actions types
+export type ActionTriggerType = string;
+export type ActionScreenshotMode = string;
+export type ActionStatus = string;
+
+export interface ActionsConfig {
+    enabled: boolean;
+    triggerType: ActionTriggerType;
+    customBetCount: number;
+    minTradeSize: number;
+    screenshotMode: ActionScreenshotMode;
+    customPrompt: string;
+    exampleTweets: string[];
+    useHistorical: boolean;
+    reviewEnabled: boolean;
+    maxRetries: number;
+    retryBackoffSecs: number;
+}
+
+export interface TweetAction {
+    id: string;
+    accountId: string;
+    triggerType: ActionTriggerType;
+    walletAddress: string;
+    walletProfile?: WalletProfile;
+    tradeEvent?: PolymarketEvent;
+    marketUrl: string;
+    profileUrl: string;
+    status: ActionStatus;
+    draftText: string;
+    reviewedText: string;
+    finalText: string;
+    screenshotPath: string;
+    postedTweetId: string;
+    createdAt: string;
+    updatedAt: string;
+    processedAt?: string;
+    retryCount: number;
+    nextRetryAt?: string;
+    errorMessage: string;
+}
+
+export interface TweetActionHistory {
+    id: string;
+    accountId: string;
+    triggerType?: ActionTriggerType;
+    walletAddress: string;
+    tweetText: string;
+    postedTweetId: string;
+    createdAt: string;
+    processedAt?: string;
+    status: ActionStatus;
+}
+
+export interface ActionStats {
+    totalActions: number;
+    pendingCount: number;
+    completedCount: number;
+    failedCount: number;
+    queuedCount: number;
+    totalTokensUsed: number;
+}
+
 export interface AccountConfig {
     id: string;
     username: string;
@@ -77,6 +140,7 @@ export interface AccountConfig {
     searchConfig: SearchConfig;
     replyConfig: ReplyConfig;
     rateLimits: RateLimits;
+    actionsConfig?: ActionsConfig;
 }
 
 export interface AccountStatus {

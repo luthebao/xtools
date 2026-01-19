@@ -15,15 +15,21 @@ import {
     AlertCircle,
     AlertTriangle,
     Info,
+    Zap,
+    Settings2,
+    ChevronDown,
+    ChevronUp,
+    Plus,
 } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Switch } from '../components/ui/switch';
 import { useAccountStore } from '../store/accountStore';
 import { useReplyStore } from '../store/replyStore';
 import { useUIStore } from '../store/uiStore';
-import { AccountConfig, ActivityLog, ApprovalQueueItem, Reply } from '../types';
+import { AccountConfig, ActivityLog, ApprovalQueueItem, Reply, ActionsConfig, ActionStats, TweetActionHistory } from '../types';
 import {
     GetAccounts,
     GetWorkerStatus,
@@ -35,6 +41,10 @@ import {
     GetReplyHistory,
     ApproveReply,
     RejectReply,
+    UpdateAccount,
+    GetActionStats,
+    GetActionHistory,
+    TestTweetAction,
 } from '../../wailsjs/go/main/App';
 import AccountEditor from '../components/AccountEditor';
 
@@ -52,6 +62,9 @@ export default function AccountDetail() {
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [editingAccount, setEditingAccount] = useState<AccountConfig | null>(null);
     const [activeTab, setActiveTab] = useState('actions');
+    const [showActionsConfig, setShowActionsConfig] = useState(false);
+    const [actionStats, setActionStats] = useState<ActionStats | null>(null);
+    const [actionHistory, setActionHistory] = useState<TweetActionHistory[]>([]);
 
     useEffect(() => {
         loadData();
@@ -89,11 +102,25 @@ export default function AccountDetail() {
                 return;
             }
 
-            await Promise.all([loadLogs(), loadReplies()]);
+            await Promise.all([loadLogs(), loadReplies(), loadActions()]);
         } catch (err: any) {
             showToast(err?.message || 'Failed to load account', 'error');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const loadActions = async () => {
+        if (!accountId) return;
+        try {
+            const [stats, history] = await Promise.all([
+                GetActionStats(accountId),
+                GetActionHistory(accountId, 10),
+            ]);
+            setActionStats(stats || null);
+            setActionHistory(history || []);
+        } catch (err) {
+            // Silent fail for auto-refresh
         }
     };
 
@@ -181,6 +208,67 @@ export default function AccountDetail() {
         setEditingAccount(null);
         await loadData();
     };
+
+    const handleToggleActions = async (enabled: boolean) => {
+        if (!account) return;
+        try {
+            const updatedAccount = {
+                ...account,
+                actionsConfig: {
+                    ...(account.actionsConfig || getDefaultActionsConfig()),
+                    enabled,
+                },
+            };
+            await UpdateAccount(updatedAccount as any);
+            setAccount(updatedAccount);
+            showToast(enabled ? 'Tweet Actions enabled' : 'Tweet Actions disabled', 'info');
+        } catch (err: any) {
+            showToast(err?.message || 'Failed to update actions', 'error');
+        }
+    };
+
+    const handleUpdateActionsConfig = async (config: Partial<ActionsConfig>) => {
+        if (!account) return;
+        try {
+            const updatedAccount = {
+                ...account,
+                actionsConfig: {
+                    ...(account.actionsConfig || getDefaultActionsConfig()),
+                    ...config,
+                },
+            };
+            await UpdateAccount(updatedAccount as any);
+            setAccount(updatedAccount);
+            showToast('Actions config updated', 'success');
+        } catch (err: any) {
+            showToast(err?.message || 'Failed to update actions config', 'error');
+        }
+    };
+
+    const handleTestAction = async () => {
+        if (!accountId) return;
+        try {
+            await TestTweetAction(accountId);
+            showToast('Test action queued', 'success');
+            loadActions();
+        } catch (err: any) {
+            showToast(err?.message || 'Failed to test action', 'error');
+        }
+    };
+
+    const getDefaultActionsConfig = (): ActionsConfig => ({
+        enabled: false,
+        triggerType: 'fresh_insider',
+        customBetCount: 3,
+        minTradeSize: 1000,
+        screenshotMode: 'none',
+        customPrompt: '',
+        exampleTweets: [],
+        useHistorical: true,
+        reviewEnabled: true,
+        maxRetries: 3,
+        retryBackoffSecs: 60,
+    });
 
     if (!account) {
         return (
@@ -275,6 +363,99 @@ export default function AccountDetail() {
                                             <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                                         </span>
                                         <span className="text-sm text-green-400">Worker is active and searching...</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </Card>
+
+                    {/* Tweet Actions Card */}
+                    <Card title="Tweet Actions (Polymarket)">
+                        <div className="space-y-4">
+                            {/* Enable Toggle */}
+                            <div className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg border border-border">
+                                <div className="flex items-center gap-3">
+                                    <Zap size={20} className={account.actionsConfig?.enabled ? 'text-yellow-400' : 'text-muted-foreground'} />
+                                    <div>
+                                        <p className="font-medium">Auto Tweet on Polymarket Events</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            Automatically generate and post tweets when fresh wallets or trades are detected
+                                        </p>
+                                    </div>
+                                </div>
+                                <Switch
+                                    checked={account.actionsConfig?.enabled || false}
+                                    onCheckedChange={handleToggleActions}
+                                />
+                            </div>
+
+                            {account.actionsConfig?.enabled && (
+                                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                        <span className="flex h-2 w-2">
+                                            <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-yellow-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                                        </span>
+                                        <span className="text-sm text-yellow-400">
+                                            Tweet Actions active - Trigger: {account.actionsConfig.triggerType.replace('_', ' ')}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Quick Config */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="outline">
+                                        Trigger: {(account.actionsConfig?.triggerType || 'fresh_insider').replace('_', ' ')}
+                                    </Badge>
+                                    <Badge variant="outline">
+                                        Screenshot: {account.actionsConfig?.screenshotMode || 'none'}
+                                    </Badge>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button variant="ghost" size="sm" onClick={handleTestAction}>
+                                        <Zap size={14} />
+                                        Test
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowActionsConfig(!showActionsConfig)}
+                                    >
+                                        <Settings2 size={14} />
+                                        Configure
+                                        {showActionsConfig ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Expandable Config */}
+                            {showActionsConfig && (
+                                <ActionsConfigPanel
+                                    config={account.actionsConfig || getDefaultActionsConfig()}
+                                    onUpdate={handleUpdateActionsConfig}
+                                />
+                            )}
+
+                            {/* Action Stats */}
+                            {actionStats && (
+                                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-border">
+                                    <div className="text-center">
+                                        <p className="text-lg font-bold">{actionStats.totalActions}</p>
+                                        <p className="text-xs text-muted-foreground">Total</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-lg font-bold text-yellow-500">{actionStats.pendingCount}</p>
+                                        <p className="text-xs text-muted-foreground">Pending</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-lg font-bold text-green-500">{actionStats.completedCount}</p>
+                                        <p className="text-xs text-muted-foreground">Completed</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-lg font-bold text-red-500">{actionStats.failedCount}</p>
+                                        <p className="text-xs text-muted-foreground">Failed</p>
                                     </div>
                                 </div>
                             )}
@@ -580,6 +761,200 @@ function ReplyHistoryCard({ reply }: { reply: Reply }) {
                         </a>
                     )}
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// Actions Config Panel Component
+function ActionsConfigPanel({
+    config,
+    onUpdate,
+}: {
+    config: ActionsConfig;
+    onUpdate: (config: Partial<ActionsConfig>) => void;
+}) {
+    const [localConfig, setLocalConfig] = useState(config);
+    const [newExample, setNewExample] = useState('');
+
+    const handleChange = (key: keyof ActionsConfig, value: any) => {
+        setLocalConfig(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleSave = () => {
+        onUpdate(localConfig);
+    };
+
+    const addExample = () => {
+        if (newExample.trim()) {
+            const examples = [...(localConfig.exampleTweets || []), newExample.trim()];
+            setLocalConfig(prev => ({ ...prev, exampleTweets: examples }));
+            setNewExample('');
+        }
+    };
+
+    const removeExample = (index: number) => {
+        const examples = localConfig.exampleTweets.filter((_, i) => i !== index);
+        setLocalConfig(prev => ({ ...prev, exampleTweets: examples }));
+    };
+
+    return (
+        <div className="space-y-4 p-4 bg-secondary/30 rounded-lg border border-border">
+            {/* Trigger Type */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Trigger Type</label>
+                    <select
+                        value={localConfig.triggerType}
+                        onChange={(e) => handleChange('triggerType', e.target.value)}
+                        className="w-full p-2 bg-background border border-border rounded-md text-sm"
+                    >
+                        <option value="fresh_insider">Fresh Insider (0-1 bets)</option>
+                        <option value="fresh_wallet">Fresh Wallet (0-5 bets)</option>
+                        <option value="big_trade">Big Trade Only</option>
+                        <option value="any_trade">Any Trade</option>
+                        <option value="custom_bet_count">Custom Bet Count</option>
+                    </select>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Screenshot Mode</label>
+                    <select
+                        value={localConfig.screenshotMode}
+                        onChange={(e) => handleChange('screenshotMode', e.target.value)}
+                        className="w-full p-2 bg-background border border-border rounded-md text-sm"
+                    >
+                        <option value="none">No Screenshot</option>
+                        <option value="market">Capture Market Page</option>
+                        <option value="profile">Capture Wallet Profile</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* Conditional Fields */}
+            {localConfig.triggerType === 'custom_bet_count' && (
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Max Bet Count</label>
+                    <input
+                        type="number"
+                        value={localConfig.customBetCount}
+                        onChange={(e) => handleChange('customBetCount', parseInt(e.target.value))}
+                        className="w-full p-2 bg-background border border-border rounded-md text-sm"
+                    />
+                </div>
+            )}
+
+            {localConfig.triggerType === 'big_trade' && (
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Min Trade Size (USDC)</label>
+                    <input
+                        type="number"
+                        value={localConfig.minTradeSize}
+                        onChange={(e) => handleChange('minTradeSize', parseFloat(e.target.value))}
+                        className="w-full p-2 bg-background border border-border rounded-md text-sm"
+                    />
+                </div>
+            )}
+
+            {/* Custom Prompt */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium">Custom System Prompt (optional)</label>
+                <textarea
+                    value={localConfig.customPrompt}
+                    onChange={(e) => handleChange('customPrompt', e.target.value)}
+                    placeholder="You are a crypto trading analyst..."
+                    className="w-full p-2 bg-background border border-border rounded-md text-sm min-h-[80px]"
+                />
+            </div>
+
+            {/* Example Tweets */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium">Example Tweets (for style reference)</label>
+                <div className="space-y-2">
+                    {localConfig.exampleTweets?.map((tweet, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                            <span className="flex-1 text-sm p-2 bg-background border border-border rounded-md truncate">
+                                {tweet}
+                            </span>
+                            <button
+                                onClick={() => removeExample(index)}
+                                className="p-1 text-red-400 hover:text-red-300"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    ))}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            value={newExample}
+                            onChange={(e) => setNewExample(e.target.value)}
+                            placeholder="Add example tweet..."
+                            className="flex-1 p-2 bg-background border border-border rounded-md text-sm"
+                            onKeyDown={(e) => e.key === 'Enter' && addExample()}
+                        />
+                        <button
+                            onClick={addExample}
+                            className="p-2 text-primary hover:text-primary/80"
+                        >
+                            <Plus size={16} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Toggles */}
+            <div className="grid grid-cols-2 gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={localConfig.useHistorical}
+                        onChange={(e) => handleChange('useHistorical', e.target.checked)}
+                        className="rounded"
+                    />
+                    <span className="text-sm">Use Historical Tweets</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={localConfig.reviewEnabled}
+                        onChange={(e) => handleChange('reviewEnabled', e.target.checked)}
+                        className="rounded"
+                    />
+                    <span className="text-sm">Enable Review Step</span>
+                </label>
+            </div>
+
+            {/* Retry Settings */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Max Retries</label>
+                    <input
+                        type="number"
+                        value={localConfig.maxRetries}
+                        onChange={(e) => handleChange('maxRetries', parseInt(e.target.value))}
+                        className="w-full p-2 bg-background border border-border rounded-md text-sm"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Retry Backoff (secs)</label>
+                    <input
+                        type="number"
+                        value={localConfig.retryBackoffSecs}
+                        onChange={(e) => handleChange('retryBackoffSecs', parseInt(e.target.value))}
+                        className="w-full p-2 bg-background border border-border rounded-md text-sm"
+                    />
+                </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end pt-2">
+                <button
+                    onClick={handleSave}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90"
+                >
+                    Save Changes
+                </button>
             </div>
         </div>
     );

@@ -54,6 +54,14 @@ export function GetAccounts() {
   return window['go']['main']['App']['GetAccounts']();
 }
 
+export function GetActionHistory(arg1, arg2) {
+  return window['go']['main']['App']['GetActionHistory'](arg1, arg2);
+}
+
+export function GetActionStats(arg1) {
+  return window['go']['main']['App']['GetActionStats'](arg1);
+}
+
 export function GetActivityLogs(arg1, arg2) {
   return window['go']['main']['App']['GetActivityLogs'](arg1, arg2);
 }
@@ -92,6 +100,10 @@ export function GetExportPath(arg1) {
 
 export function GetNotificationConfig() {
   return window['go']['main']['App']['GetNotificationConfig']();
+}
+
+export function GetPendingActions(arg1) {
+  return window['go']['main']['App']['GetPendingActions'](arg1);
 }
 
 export function GetPendingReplies(arg1) {
@@ -200,6 +212,10 @@ export function StopPolymarketWatcher() {
 
 export function TestAccountConnection(arg1) {
   return window['go']['main']['App']['TestAccountConnection'](arg1);
+}
+
+export function TestTweetAction(arg1) {
+  return window['go']['main']['App']['TestTweetAction'](arg1);
 }
 
 export function UpdateAccount(arg1) {

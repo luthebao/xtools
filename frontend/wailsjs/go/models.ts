@@ -20,6 +20,38 @@ export namespace domain {
 	        this.bearerToken = source["bearerToken"];
 	    }
 	}
+	export class ActionsConfig {
+	    enabled: boolean;
+	    triggerType: string;
+	    customBetCount: number;
+	    minTradeSize: number;
+	    screenshotMode: string;
+	    customPrompt: string;
+	    exampleTweets: string[];
+	    useHistorical: boolean;
+	    reviewEnabled: boolean;
+	    maxRetries: number;
+	    retryBackoffSecs: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionsConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.triggerType = source["triggerType"];
+	        this.customBetCount = source["customBetCount"];
+	        this.minTradeSize = source["minTradeSize"];
+	        this.screenshotMode = source["screenshotMode"];
+	        this.customPrompt = source["customPrompt"];
+	        this.exampleTweets = source["exampleTweets"];
+	        this.useHistorical = source["useHistorical"];
+	        this.reviewEnabled = source["reviewEnabled"];
+	        this.maxRetries = source["maxRetries"];
+	        this.retryBackoffSecs = source["retryBackoffSecs"];
+	    }
+	}
 	export class RateLimits {
 	    searchesPerHour: number;
 	    repliesPerHour: number;
@@ -180,6 +212,7 @@ export namespace domain {
 	    searchConfig: SearchConfig;
 	    replyConfig: ReplyConfig;
 	    rateLimits: RateLimits;
+	    actionsConfig: ActionsConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new AccountConfig(source);
@@ -198,6 +231,7 @@ export namespace domain {
 	        this.searchConfig = this.convertValues(source["searchConfig"], SearchConfig);
 	        this.replyConfig = this.convertValues(source["replyConfig"], ReplyConfig);
 	        this.rateLimits = this.convertValues(source["rateLimits"], RateLimits);
+	        this.actionsConfig = this.convertValues(source["actionsConfig"], ActionsConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -262,6 +296,29 @@ export namespace domain {
 		    return a;
 		}
 	}
+	export class ActionStats {
+	    totalActions: number;
+	    pendingCount: number;
+	    completedCount: number;
+	    failedCount: number;
+	    queuedCount: number;
+	    totalTokensUsed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalActions = source["totalActions"];
+	        this.pendingCount = source["pendingCount"];
+	        this.completedCount = source["completedCount"];
+	        this.failedCount = source["failedCount"];
+	        this.queuedCount = source["queuedCount"];
+	        this.totalTokensUsed = source["totalTokensUsed"];
+	    }
+	}
+	
 	export class ActivityLog {
 	    id: string;
 	    accountId: string;
@@ -953,6 +1010,128 @@ export namespace domain {
 	}
 	
 	
+	export class TweetAction {
+	    id: string;
+	    accountId: string;
+	    triggerType: string;
+	    walletAddress: string;
+	    walletProfile?: WalletProfile;
+	    tradeEvent?: PolymarketEvent;
+	    marketUrl: string;
+	    profileUrl: string;
+	    status: string;
+	    draftText: string;
+	    reviewedText: string;
+	    finalText: string;
+	    screenshotPath: string;
+	    postedTweetId: string;
+	    // Go type: time
+	    createdAt: any;
+	    // Go type: time
+	    updatedAt: any;
+	    // Go type: time
+	    processedAt?: any;
+	    retryCount: number;
+	    // Go type: time
+	    nextRetryAt?: any;
+	    errorMessage?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TweetAction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.accountId = source["accountId"];
+	        this.triggerType = source["triggerType"];
+	        this.walletAddress = source["walletAddress"];
+	        this.walletProfile = this.convertValues(source["walletProfile"], WalletProfile);
+	        this.tradeEvent = this.convertValues(source["tradeEvent"], PolymarketEvent);
+	        this.marketUrl = source["marketUrl"];
+	        this.profileUrl = source["profileUrl"];
+	        this.status = source["status"];
+	        this.draftText = source["draftText"];
+	        this.reviewedText = source["reviewedText"];
+	        this.finalText = source["finalText"];
+	        this.screenshotPath = source["screenshotPath"];
+	        this.postedTweetId = source["postedTweetId"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
+	        this.processedAt = this.convertValues(source["processedAt"], null);
+	        this.retryCount = source["retryCount"];
+	        this.nextRetryAt = this.convertValues(source["nextRetryAt"], null);
+	        this.errorMessage = source["errorMessage"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TweetActionHistory {
+	    id: string;
+	    accountId: string;
+	    walletAddress: string;
+	    marketName: string;
+	    tweetText: string;
+	    postedTweetId: string;
+	    status: string;
+	    // Go type: time
+	    createdAt: any;
+	    // Go type: time
+	    processedAt?: any;
+	    errorMessage?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TweetActionHistory(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.accountId = source["accountId"];
+	        this.walletAddress = source["walletAddress"];
+	        this.marketName = source["marketName"];
+	        this.tweetText = source["tweetText"];
+	        this.postedTweetId = source["postedTweetId"];
+	        this.status = source["status"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.processedAt = this.convertValues(source["processedAt"], null);
+	        this.errorMessage = source["errorMessage"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

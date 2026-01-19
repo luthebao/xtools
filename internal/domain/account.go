@@ -73,6 +73,9 @@ type AccountConfig struct {
 
 	// Rate Limiting
 	RateLimits RateLimits `yaml:"rate_limits" json:"rateLimits"`
+
+	// Actions Configuration (tweet actions for Polymarket events)
+	ActionsConfig ActionsConfig `yaml:"actions_config" json:"actionsConfig"`
 }
 
 // APICredentials holds Twitter API v2 credentials

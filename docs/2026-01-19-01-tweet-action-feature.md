@@ -26,7 +26,7 @@ The feature follows the existing Hexagonal/Clean Architecture pattern with:
 
 ### Event Flow
 
-```
+```bash
 Polymarket Watcher
        │
        ▼
@@ -280,7 +280,7 @@ Added "Tweet Actions (Polymarket)" card in Worker Control section:
 ### Per-Account Settings
 
 | Setting | Type | Default | Description |
-|---------|------|---------|-------------|
+| ------- | ---- | ------- | ----------- |
 | enabled | bool | false | Enable/disable actions |
 | triggerType | string | "fresh_insider" | When to trigger |
 | customBetCount | int | 3 | For custom trigger |
@@ -296,7 +296,7 @@ Added "Tweet Actions (Polymarket)" card in Worker Control section:
 ### Trigger Types
 
 | Trigger | Description | Condition |
-|---------|-------------|-----------|
+| ------- | ----------- | --------- |
 | fresh_insider | Brand new wallet | bet_count <= 1 |
 | fresh_wallet | Fresh wallet | bet_count <= 5 |
 | big_trade | Large trades only | notional >= minTradeSize |
@@ -348,7 +348,7 @@ CREATE TABLE action_event_log (
 ## API Endpoints (Wails Bindings)
 
 | Method | Parameters | Returns | Description |
-|--------|------------|---------|-------------|
+| ------ | ---------- | ------- | ----------- |
 | GetPendingActions | accountID | []TweetAction | Get pending actions |
 | GetActionHistory | accountID, limit | []TweetActionHistory | Get action history |
 | GetActionStats | accountID | ActionStats | Get statistics |
@@ -363,7 +363,7 @@ CREATE TABLE action_event_log (
 
 ### Retry Logic
 
-```
+```bash
 delay = retryBackoffSecs * 2^(retryCount-1)
 ```
 
@@ -376,7 +376,7 @@ Example with 60s base backoff:
 ## Events Emitted
 
 | Event | Data | Description |
-|-------|------|-------------|
+| ----- | ---- | ----------- |
 | action:queued | TweetAction | Action enqueued |
 | action:generating | TweetAction | LLM generation started |
 | action:posting | TweetAction | Tweet posting started |

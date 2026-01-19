@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { FolderOpen, RefreshCw, FileText, Download, ExternalLink, Check, Trash2, AlertTriangle, Database } from 'lucide-react';
+import { FolderOpen, RefreshCw, FileText, Download, ExternalLink, Check, Trash2, AlertTriangle, Database, ScrollText } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import { Badge } from '../components/ui/badge';
 import ConfirmModal from '../components/common/ConfirmModal';
+import LogsViewerModal from '../components/common/LogsViewerModal';
 import { useUIStore } from '../store/uiStore';
 import { UpdateInfo, DatabaseInfo } from '../types';
-import { CheckForUpdates, GetAppVersion, GetDataDir, GetDatabaseInfo, ClearPolymarketEvents } from '../../wailsjs/go/main/App';
+import { CheckForUpdates, GetAppVersion, GetDataDir, GetDatabaseInfo, ClearPolymarketEvents, OpenFolder } from '../../wailsjs/go/main/App';
 
 export default function Settings() {
     const { showToast } = useUIStore();
@@ -17,6 +18,7 @@ export default function Settings() {
     const [dbInfo, setDbInfo] = useState<DatabaseInfo | null>(null);
     const [isClearing, setIsClearing] = useState(false);
     const [showClearConfirm, setShowClearConfirm] = useState(false);
+    const [showLogsModal, setShowLogsModal] = useState(false);
 
     const DB_SIZE_WARNING_THRESHOLD = 20 * 1024 * 1024; // 20MB
 
@@ -106,7 +108,7 @@ export default function Settings() {
                             <code className="flex-1 bg-secondary px-3 py-2 rounded text-sm font-mono break-all">
                                 {dataDir || 'Loading...'}
                             </code>
-                            <Button variant="secondary" size="sm">
+                            <Button variant="secondary" size="sm" onClick={() => dataDir && OpenFolder(dataDir)}>
                                 <FolderOpen size={16} />
                                 Open
                             </Button>
@@ -171,6 +173,19 @@ export default function Settings() {
                 </div>
             </Card>
 
+            <Card title="Debug Logs">
+                <div className="space-y-4">
+                    <p className="text-muted-foreground">
+                        View application logs to debug issues. Logs include authentication errors, search operations,
+                        worker status, and other activity across all accounts.
+                    </p>
+                    <Button variant="secondary" onClick={() => setShowLogsModal(true)}>
+                        <ScrollText size={16} />
+                        Open Logs Viewer
+                    </Button>
+                </div>
+            </Card>
+
             <Card title="Configuration Files">
                 <div className="space-y-4">
                     <p className="text-muted-foreground">
@@ -179,7 +194,7 @@ export default function Settings() {
                     </p>
 
                     <div className="flex items-center gap-2">
-                        <Button variant="secondary">
+                        <Button variant="secondary" onClick={() => dataDir && OpenFolder(`${dataDir}/accounts`)}>
                             <FolderOpen size={16} />
                             Open Config Folder
                         </Button>
@@ -198,7 +213,7 @@ export default function Settings() {
                         Each account has its own export file.
                     </p>
 
-                    <Button variant="secondary">
+                    <Button variant="secondary" onClick={() => dataDir && OpenFolder(`${dataDir}/exports`)}>
                         <FileText size={16} />
                         Open Exports Folder
                     </Button>
@@ -306,6 +321,11 @@ export default function Settings() {
                 message="Are you sure you want to delete all Polymarket events from the database? This action cannot be undone."
                 confirmText="Clear Data"
                 variant="danger"
+            />
+
+            <LogsViewerModal
+                isOpen={showLogsModal}
+                onClose={() => setShowLogsModal(false)}
             />
         </div>
     );

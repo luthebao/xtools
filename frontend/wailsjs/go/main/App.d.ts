@@ -69,6 +69,8 @@ export function GetWorkerStatus():Promise<Record<string, boolean>>;
 
 export function ManualSearch(arg1:string,arg2:string,arg3:number):Promise<Array<domain.Tweet>>;
 
+export function OpenFolder(arg1:string):Promise<void>;
+
 export function RejectReply(arg1:string):Promise<void>;
 
 export function ReloadAccount(arg1:string):Promise<domain.AccountConfig>;

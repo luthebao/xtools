@@ -10,7 +10,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
-//go:embed all:frontend/dist
 var assets embed.FS
 
 //go:embed build/appicon.png
@@ -22,11 +21,11 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:            "XTools",
-		Width:            1024,
-		Height:           768,
-		MinWidth:         800,
-		MinHeight:        600,
+		Title:     "XTools",
+		Width:     1024,
+		Height:    768,
+		MinWidth:  800,
+		MinHeight: 600,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -36,7 +35,7 @@ func main() {
 			app,
 		},
 		Mac: &mac.Options{
-			TitleBar:             mac.TitleBarDefault(),
+			TitleBar: mac.TitleBarDefault(),
 			About: &mac.AboutInfo{
 				Title:   "XTools",
 				Message: "Twitter Automation Tool",

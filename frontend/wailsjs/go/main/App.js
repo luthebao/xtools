@@ -134,6 +134,10 @@ export function ManualSearch(arg1, arg2, arg3) {
   return window['go']['main']['App']['ManualSearch'](arg1, arg2, arg3);
 }
 
+export function OpenFolder(arg1) {
+  return window['go']['main']['App']['OpenFolder'](arg1);
+}
+
 export function RejectReply(arg1) {
   return window['go']['main']['App']['RejectReply'](arg1);
 }

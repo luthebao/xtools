@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"xtools/internal/adapters/activity"
 	"xtools/internal/adapters/events"
@@ -61,6 +63,20 @@ func getDataDir() string {
 		return "./data"
 	}
 	return filepath.Join(configDir, "XTools")
+}
+
+// openFolder opens a folder in the system file explorer
+func openFolder(path string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("explorer", path)
+	default: // linux and others
+		cmd = exec.Command("xdg-open", path)
+	}
+	return cmd.Start()
 }
 
 // startup is called at application startup
@@ -339,6 +355,11 @@ func (a *App) ClearActivityLogs(accountID string) {
 // GetDataDir returns the application data directory path
 func (a *App) GetDataDir() string {
 	return getDataDir()
+}
+
+// OpenFolder opens a folder in the system file explorer
+func (a *App) OpenFolder(path string) error {
+	return openFolder(path)
 }
 
 // CheckForUpdates checks GitHub for the latest release

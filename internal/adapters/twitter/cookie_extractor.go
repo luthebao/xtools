@@ -30,6 +30,7 @@ func (e *CookieExtractor) ExtractCookies(ctx context.Context) (*domain.BrowserAu
 	// Launch visible browser for user to log in with stealth settings
 	l := launcher.New().
 		Headless(false).
+		Leakless(false). // Disable leakless wrapper to avoid Windows antivirus false positives
 		// Anti-bot detection flags
 		Set("disable-blink-features", "AutomationControlled").
 		Set("disable-features", "IsolateOrigins,site-per-process").
